@@ -1,0 +1,19 @@
+[package]
+name = "ngt-rs"
+description = "Rust wrappers for the NGT nearest neighbor search"
+version = "0.1.0"
+edition = "2018"
+authors = ["Romain Leroux <romain@leroux.dev>"]
+repository = "https://github.com/lerouxrgd/ngt-rs"
+keywords = ["ngt", "knn", "ann", "optimization"]
+categories = ["science"]
+license = "Apache License 2.0"
+readme = "README.md"
+
+[dependencies]
+ngt-sys = { path = "ngt-sys", version = "1.10.0" }
+num_enum = "0.4"
+scopeguard = "1.1"
+
+[dev-dependencies]
+tempfile = "3.1"
