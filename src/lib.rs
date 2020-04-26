@@ -416,33 +416,43 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_basics() {
+    fn test_basics() -> Result<(), Box<dyn std::error::Error>> {
         let dir = tempdir().unwrap();
 
         let prop = Property {
-            index_path: CString::new(dir.path().to_string_lossy().as_bytes()).unwrap(),
+            index_path: CString::new(dir.path().to_string_lossy().as_bytes())?,
             dimension: 3,
             ..Default::default()
         };
 
         let mut ngt = Ngt::new(prop);
-        ngt.open().unwrap();
+        ngt.open()?;
 
-        let id1 = ngt.insert(vec![1.0, 2.0, 3.0]).unwrap();
-        let id2 = ngt.insert(vec![4.0, 5.0, 6.0]).unwrap();
+        let id1 = ngt.insert(vec![1.0, 2.0, 3.0])?;
+        let id2 = ngt.insert(vec![4.0, 5.0, 6.0])?;
 
-        // ngt.remove(id1).unwrap(); // TODO: investigate SIGSEV
+        ngt.create_index(4)?;
+        ngt.save_index()?;
 
-        let v = ngt.get_vec(id1).unwrap();
+        let res = ngt.search(&vec![1.1, 2.1, 3.1], 1, 0.01, -1.0)?;
+        println!("-----> {:?}", res);
+
+        let v = ngt.get_vec(id1)?;
+        println!("-----> {:?}", v);
+        let v = ngt.get_vec(id2)?;
         println!("-----> {:?}", v);
 
-        let v = ngt.get_vec(id2).unwrap();
+        ngt.remove(id1)?;
+
+        let v = ngt.get_vec(id1).unwrap_err();
         println!("-----> {:?}", v);
 
-        let v = ngt.get_vec(id1).unwrap();
+        let v = ngt.get_vec(id2)?;
         println!("-----> {:?}", v);
 
         ngt.close();
-        dir.close().unwrap();
+        dir.close()?;
+
+        Ok(())
     }
 }
