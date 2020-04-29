@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use std::convert::TryFrom;
 use std::ffi::{CStr, CString};
 use std::fmt;
@@ -11,18 +9,18 @@ use ngt_sys as sys;
 use num_enum::TryFromPrimitive;
 use scopeguard::defer;
 
-type VecId = u32;
+pub type VecId = u32;
 
 #[derive(Debug, TryFromPrimitive)]
 #[repr(i32)]
-enum ObjectType {
+pub enum ObjectType {
     Uint8 = 1,
     Float = 2,
 }
 
 #[derive(Debug)]
 #[non_exhaustive]
-enum DistanceType {
+pub enum DistanceType {
     L1,
     L2,
     Angle,
@@ -33,13 +31,13 @@ enum DistanceType {
 }
 
 #[derive(Debug)]
-struct SearchResult {
+pub struct SearchResult {
     id: u32,
     distance: f32,
 }
 
 #[derive(Debug)]
-struct Error(String);
+pub struct Error(String);
 
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -87,14 +85,14 @@ impl Default for Property {
     }
 }
 
-struct Ngt {
+pub struct Ngt {
     prop: Property,
     index: sys::NGTIndex,
     ospace: sys::NGTObjectSpace,
 }
 
 impl Ngt {
-    fn new(prop: Property) -> Self {
+    pub fn new(prop: Property) -> Self {
         Ngt {
             prop,
             index: ptr::null_mut(),
@@ -102,7 +100,7 @@ impl Ngt {
         }
     }
 
-    fn open(&mut self) -> Result<(), Error> {
+    pub fn open(&mut self) -> Result<(), Error> {
         unsafe {
             let ebuf = sys::ngt_create_error_object();
             defer! { sys::ngt_destroy_error_object(ebuf); }
@@ -212,7 +210,7 @@ impl Ngt {
         }
     }
 
-    fn search(
+    pub fn search(
         &self,
         vec: &[f64],
         size: usize,
@@ -265,7 +263,7 @@ impl Ngt {
         }
     }
 
-    fn insert(&mut self, mut vec: Vec<f64>) -> Result<VecId, Error> {
+    pub fn insert(&mut self, mut vec: Vec<f64>) -> Result<VecId, Error> {
         unsafe {
             let ebuf = sys::ngt_create_error_object();
             defer! { sys::ngt_destroy_error_object(ebuf); }
@@ -284,14 +282,14 @@ impl Ngt {
         }
     }
 
-    fn insert_commit(&mut self, vec: Vec<f64>, pool_size: u32) -> Result<VecId, Error> {
+    pub fn insert_commit(&mut self, vec: Vec<f64>, pool_size: u32) -> Result<VecId, Error> {
         let id = self.insert(vec)?;
         self.create_index(pool_size)?;
         self.save_index()?;
         Ok(id)
     }
 
-    fn insert_commit_bulk(
+    pub fn insert_commit_bulk(
         &mut self,
         vecs: Vec<Vec<f64>>,
         pool_size: u32,
@@ -313,7 +311,7 @@ impl Ngt {
         Ok(ids)
     }
 
-    fn create_index(&mut self, pool_size: u32) -> Result<(), Error> {
+    pub fn create_index(&mut self, pool_size: u32) -> Result<(), Error> {
         unsafe {
             let ebuf = sys::ngt_create_error_object();
             defer! { sys::ngt_destroy_error_object(ebuf); }
@@ -326,12 +324,12 @@ impl Ngt {
         }
     }
 
-    fn create_and_save_index(&mut self, pool_size: u32) -> Result<(), Error> {
+    pub fn create_and_save_index(&mut self, pool_size: u32) -> Result<(), Error> {
         self.create_index(pool_size)?;
         self.save_index()
     }
 
-    fn save_index(&mut self) -> Result<(), Error> {
+    pub fn save_index(&mut self) -> Result<(), Error> {
         unsafe {
             let ebuf = sys::ngt_create_error_object();
             defer! { sys::ngt_destroy_error_object(ebuf); }
@@ -344,7 +342,7 @@ impl Ngt {
         }
     }
 
-    fn remove(&mut self, id: VecId) -> Result<(), Error> {
+    pub fn remove(&mut self, id: VecId) -> Result<(), Error> {
         unsafe {
             let ebuf = sys::ngt_create_error_object();
             defer! { sys::ngt_destroy_error_object(ebuf); }
@@ -357,7 +355,7 @@ impl Ngt {
         }
     }
 
-    fn get_vec(&self, id: VecId) -> Result<Vec<f32>, Error> {
+    pub fn get_vec(&self, id: VecId) -> Result<Vec<f32>, Error> {
         unsafe {
             let ebuf = sys::ngt_create_error_object();
             defer! { sys::ngt_destroy_error_object(ebuf); }
@@ -399,7 +397,7 @@ impl Ngt {
         }
     }
 
-    fn close(&mut self) {
+    pub fn close(&mut self) {
         unsafe {
             if !self.index.is_null() {
                 sys::ngt_close_index(self.index);
