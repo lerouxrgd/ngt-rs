@@ -1,10 +1,10 @@
 [package]
 name = "ngt-sys"
-version = "1.10.0"
+version = "1.11.1"
 authors = ["Romain Leroux <romain@leroux.dev>"]
 edition = "2018"
 links = "ngt"
 
 [build-dependencies]
-bindgen = "0.51"
+bindgen = "0.53"
 cmake = "0.1"

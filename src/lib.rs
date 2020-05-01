@@ -213,7 +213,7 @@ impl Ngt {
     pub fn search(
         &self,
         vec: &[f64],
-        size: usize,
+        size: u64,
         epsilon: f32,
         radius: f32,
     ) -> Result<Vec<SearchResult>, Error> {
