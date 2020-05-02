@@ -1,34 +1,18 @@
-use std::convert::TryFrom;
+pub mod properties;
+
 use std::ffi::{CStr, CString};
 use std::fmt;
 use std::mem;
+use std::os::unix::ffi::OsStrExt;
+use std::path::PathBuf;
 use std::ptr;
-use std::time::{SystemTime, UNIX_EPOCH};
 
 use ngt_sys as sys;
-use num_enum::TryFromPrimitive;
 use scopeguard::defer;
 
+use crate::properties::{ObjectType, Properties};
+
 pub type VecId = u32;
-
-#[derive(Debug, TryFromPrimitive)]
-#[repr(i32)]
-pub enum ObjectType {
-    Uint8 = 1,
-    Float = 2,
-}
-
-#[derive(Debug)]
-#[non_exhaustive]
-pub enum DistanceType {
-    L1,
-    L2,
-    Angle,
-    Hamming,
-    Cosine,
-    // NormalizedAngle,  // Not implemented in C API
-    // NormalizedCosine, // Not implemented in C API
-}
 
 #[derive(Debug)]
 pub struct SearchResult {
@@ -45,6 +29,18 @@ impl fmt::Display for Error {
     }
 }
 
+impl From<std::num::TryFromIntError> for Error {
+    fn from(source: std::num::TryFromIntError) -> Self {
+        Self(source.to_string())
+    }
+}
+
+impl From<std::ffi::NulError> for Error {
+    fn from(source: std::ffi::NulError) -> Self {
+        Self(source.to_string())
+    }
+}
+
 impl std::error::Error for Error {}
 
 fn make_err(err: sys::NGTError) -> Error {
@@ -53,51 +49,23 @@ fn make_err(err: sys::NGTError) -> Error {
     Error(err.to_string_lossy().into())
 }
 
-#[derive(Debug)]
-pub struct Property {
-    dimension: i32,
-    creation_edge_size: i16,
-    search_edge_size: i16,
-    object_type: ObjectType,
-    distance_type: DistanceType,
-    index_path: CString,
-    bulk_insert_chunk_size: usize,
-}
-
-impl Default for Property {
-    fn default() -> Self {
-        Property {
-            dimension: 0,
-            creation_edge_size: 10,
-            search_edge_size: 40,
-            object_type: ObjectType::Float,
-            distance_type: DistanceType::L2,
-            index_path: CString::new(format!(
-                "/tmp/ngt-{}",
-                SystemTime::now()
-                    .duration_since(UNIX_EPOCH)
-                    .expect("back to the future")
-                    .as_secs()
-            ))
-            .expect("default index_path contains an internal 0 byte"),
-            bulk_insert_chunk_size: 100,
-        }
-    }
-}
-
 pub struct Ngt {
-    prop: Property,
+    index_path: CString,
+    prop: Properties,
     index: sys::NGTIndex,
     ospace: sys::NGTObjectSpace,
 }
 
 impl Ngt {
-    pub fn new(prop: Property) -> Self {
-        Ngt {
+    pub fn new<P: Into<PathBuf>>(index_path: P, prop: Properties) -> Result<Self, Error> {
+        let index_path = CString::new(index_path.into().into_os_string().as_bytes())?;
+
+        Ok(Ngt {
+            index_path,
             prop,
             index: ptr::null_mut(),
             ospace: ptr::null_mut(),
-        }
+        })
     }
 
     pub fn open(&mut self) -> Result<(), Error> {
@@ -105,82 +73,19 @@ impl Ngt {
             let ebuf = sys::ngt_create_error_object();
             defer! { sys::ngt_destroy_error_object(ebuf); }
 
-            let prop = sys::ngt_create_property(ebuf);
-            if prop.is_null() {
-                Err(make_err(ebuf))?
-            }
-            defer! { sys::ngt_destroy_property(prop); }
-
-            if !sys::ngt_set_property_dimension(prop, self.prop.dimension, ebuf) {
-                Err(make_err(ebuf))?
-            }
-
-            if !sys::ngt_set_property_edge_size_for_creation(
-                prop,
-                self.prop.creation_edge_size,
-                ebuf,
-            ) {
-                Err(make_err(ebuf))?
-            }
-
-            if !sys::ngt_set_property_edge_size_for_search(prop, self.prop.search_edge_size, ebuf) {
-                Err(make_err(ebuf))?
-            }
-
-            match self.prop.object_type {
-                ObjectType::Uint8 => {
-                    if !sys::ngt_set_property_object_type_integer(prop, ebuf) {
-                        Err(make_err(ebuf))?
-                    }
-                }
-                ObjectType::Float => {
-                    if !sys::ngt_set_property_object_type_float(prop, ebuf) {
-                        Err(make_err(ebuf))?
-                    }
-                }
-            }
-
-            match self.prop.distance_type {
-                DistanceType::L1 => {
-                    if !sys::ngt_set_property_distance_type_l1(prop, ebuf) {
-                        Err(make_err(ebuf))?
-                    }
-                }
-                DistanceType::L2 => {
-                    if !sys::ngt_set_property_distance_type_l2(prop, ebuf) {
-                        Err(make_err(ebuf))?
-                    }
-                }
-                DistanceType::Angle => {
-                    if !sys::ngt_set_property_distance_type_angle(prop, ebuf) {
-                        Err(make_err(ebuf))?
-                    }
-                }
-                DistanceType::Hamming => {
-                    if !sys::ngt_set_property_distance_type_hamming(prop, ebuf) {
-                        Err(make_err(ebuf))?
-                    }
-                }
-                DistanceType::Cosine => {
-                    if !sys::ngt_set_property_distance_type_cosine(prop, ebuf) {
-                        Err(make_err(ebuf))?
-                    }
-                }
-            }
-
-            self.index = sys::ngt_open_index(self.prop.index_path.as_ptr(), ebuf);
+            self.index = sys::ngt_open_index(self.index_path.as_ptr(), ebuf);
             if self.index.is_null() {
                 let err = make_err(ebuf);
                 let is_prop_err = err
                     .0
-                    .contains("PropertySet::load: Cannot load the property file ")
-                    || err
-                        .0
-                        .contains("PropertSet::load: Cannot load the property file ");
+                    .contains("PropertySet::load: Cannot load the property file ");
 
                 if is_prop_err {
-                    self.index =
-                        sys::ngt_create_graph_and_tree(self.prop.index_path.as_ptr(), prop, ebuf);
+                    self.index = sys::ngt_create_graph_and_tree(
+                        self.index_path.as_ptr(),
+                        self.prop.raw_prop,
+                        ebuf,
+                    );
                     if self.index.is_null() {
                         Err(make_err(ebuf))?
                     }
@@ -188,18 +93,6 @@ impl Ngt {
             } else {
                 Err(make_err(ebuf))?
             }
-
-            if !sys::ngt_get_property(self.index, prop, ebuf) {
-                Err(make_err(ebuf))?
-            }
-
-            let object_type = sys::ngt_get_property_object_type(prop, ebuf);
-            if object_type < 0 {
-                Err(make_err(ebuf))?
-            }
-            let object_type =
-                ObjectType::try_from(object_type).map_err(|e| Error(e.to_string()))?;
-            self.prop.object_type = object_type;
 
             self.ospace = sys::ngt_get_object_space(self.index, ebuf);
             if self.ospace.is_null() {
@@ -282,41 +175,41 @@ impl Ngt {
         }
     }
 
-    pub fn insert_commit(&mut self, vec: Vec<f64>, pool_size: u32) -> Result<VecId, Error> {
+    pub fn insert_commit(&mut self, vec: Vec<f64>, num_threads: u32) -> Result<VecId, Error> {
         let id = self.insert(vec)?;
-        self.create_index(pool_size)?;
+        self.build_index(num_threads)?;
         self.save_index()?;
         Ok(id)
     }
 
-    pub fn insert_commit_bulk(
-        &mut self,
-        vecs: Vec<Vec<f64>>,
-        pool_size: u32,
-    ) -> Result<Vec<VecId>, Error> {
-        let mut ids = Vec::with_capacity(vecs.len());
+    // pub fn insert_commit_bulk(
+    //     &mut self,
+    //     vecs: Vec<Vec<f64>>,
+    //     num_threads: u32,
+    // ) -> Result<Vec<VecId>, Error> {
+    //     let mut ids = Vec::with_capacity(vecs.len());
 
-        let mut idx = 0;
-        for vec in vecs {
-            let id = self.insert(vec)?;
-            ids.push(id);
-            idx += 1;
-            if idx >= self.prop.bulk_insert_chunk_size {
-                self.create_and_save_index(pool_size)?;
-            }
-        }
+    //     let mut idx = 0;
+    //     for vec in vecs {
+    //         let id = self.insert(vec)?;
+    //         ids.push(id);
+    //         idx += 1;
+    //         if idx >= self.prop.bulk_insert_chunk_size {
+    //             self.build_and_save_index(num_threads)?;
+    //         }
+    //     }
 
-        self.create_and_save_index(pool_size)?;
+    //     self.build_and_save_index(num_threads)?;
 
-        Ok(ids)
-    }
+    //     Ok(ids)
+    // }
 
-    pub fn create_index(&mut self, pool_size: u32) -> Result<(), Error> {
+    pub fn build_index(&mut self, num_threads: u32) -> Result<(), Error> {
         unsafe {
             let ebuf = sys::ngt_create_error_object();
             defer! { sys::ngt_destroy_error_object(ebuf); }
 
-            if !sys::ngt_create_index(self.index, pool_size, ebuf) {
+            if !sys::ngt_create_index(self.index, num_threads, ebuf) {
                 Err(make_err(ebuf))?
             }
 
@@ -324,8 +217,8 @@ impl Ngt {
         }
     }
 
-    pub fn create_and_save_index(&mut self, pool_size: u32) -> Result<(), Error> {
-        self.create_index(pool_size)?;
+    pub fn build_and_save_index(&mut self, num_threads: u32) -> Result<(), Error> {
+        self.build_index(num_threads)?;
         self.save_index()
     }
 
@@ -334,7 +227,7 @@ impl Ngt {
             let ebuf = sys::ngt_create_error_object();
             defer! { sys::ngt_destroy_error_object(ebuf); }
 
-            if !sys::ngt_save_index(self.index, self.prop.index_path.as_ptr(), ebuf) {
+            if !sys::ngt_save_index(self.index, self.index_path.as_ptr(), ebuf) {
                 Err(make_err(ebuf))?
             }
 
@@ -417,19 +310,15 @@ mod tests {
     fn test_basics() -> Result<(), Box<dyn std::error::Error>> {
         let dir = tempdir().unwrap();
 
-        let prop = Property {
-            index_path: CString::new(dir.path().to_string_lossy().as_bytes())?,
-            dimension: 3,
-            ..Default::default()
-        };
+        let prop = Properties::new(3)?;
 
-        let mut ngt = Ngt::new(prop);
+        let mut ngt = Ngt::new(dir.path(), prop)?;
         ngt.open()?;
 
         let id1 = ngt.insert(vec![1.0, 2.0, 3.0])?;
         let id2 = ngt.insert(vec![4.0, 5.0, 6.0])?;
 
-        ngt.create_index(4)?;
+        ngt.build_index(4)?;
         ngt.save_index()?;
 
         let res = ngt.search(&vec![1.1, 2.1, 3.1], 1, 0.01, -1.0)?;
