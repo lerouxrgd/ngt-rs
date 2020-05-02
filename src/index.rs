@@ -22,13 +22,12 @@ pub struct SearchResult {
     pub distance: f32,
 }
 
-// TODO: prevent search and remove on uncommmitted index
-
 pub struct Index {
     path: CString,
     prop: Properties,
     index: sys::NGTIndex,
     ospace: sys::NGTObjectSpace,
+    is_committed: bool,
 }
 
 impl Index {
@@ -64,6 +63,7 @@ impl Index {
                 prop,
                 index,
                 ospace,
+                is_committed: false,
             })
         }
     }
@@ -92,6 +92,7 @@ impl Index {
                 prop,
                 index,
                 ospace,
+                is_committed: true,
             })
         }
     }
@@ -104,6 +105,10 @@ impl Index {
         radius: f32,
     ) -> Result<Vec<SearchResult>> {
         unsafe {
+            if !self.is_committed {
+                Err(Error("Cannot search vecs in an uncommitted index".into()))?
+            }
+
             let ebuf = sys::ngt_create_error_object();
             defer! { sys::ngt_destroy_error_object(ebuf); }
 
@@ -166,21 +171,12 @@ impl Index {
                 Err(make_err(ebuf))?
             }
 
+            self.is_committed = false;
             Ok(id)
         }
     }
 
-    pub fn insert_commit<F: Into<f64>>(&mut self, vec: Vec<F>, num_threads: u32) -> Result<VecId> {
-        let id = self.insert(vec)?;
-        self.commit(num_threads)?;
-        Ok(id)
-    }
-
-    pub fn insert_batch_commit<F: Into<f64>>(
-        &mut self,
-        batch: Vec<Vec<F>>,
-        num_threads: u32,
-    ) -> Result<()> {
+    pub fn insert_batch<F: Into<f64>>(&mut self, batch: Vec<Vec<F>>) -> Result<()> {
         unsafe {
             let batch_size = u32::try_from(batch.len())?;
 
@@ -212,8 +208,7 @@ impl Index {
                 Err(make_err(ebuf))?
             }
 
-            self.commit(num_threads)?;
-
+            self.is_committed = false;
             Ok(())
         }
     }
@@ -227,6 +222,7 @@ impl Index {
                 Err(make_err(ebuf))?
             }
 
+            self.is_committed = true;
             Ok(())
         }
     }
@@ -251,6 +247,10 @@ impl Index {
 
     pub fn remove(&mut self, id: VecId) -> Result<()> {
         unsafe {
+            if !self.is_committed {
+                Err(Error("Cannot remove vec from an uncommitted index".into()))?
+            }
+
             let ebuf = sys::ngt_create_error_object();
             defer! { sys::ngt_destroy_error_object(ebuf); }
 
@@ -318,12 +318,57 @@ impl Drop for Index {
 
 #[cfg(test)]
 mod tests {
+    use std::error::Error as StdError;
+    use std::result::Result as StdResult;
+
     use tempfile::tempdir;
 
     use super::*;
 
     #[test]
-    fn test_basics() -> std::result::Result<(), Box<dyn std::error::Error>> {
+    fn test_basics() -> StdResult<(), Box<dyn StdError>> {
+        let dir = tempdir()?;
+        if cfg!(feature = "shared_mem") {
+            std::fs::remove_dir(dir.path())?;
+        }
+
+        let prop = Properties::new(3)?;
+        let mut index = Index::create(dir.path(), prop)?;
+
+        let vec1 = vec![1.0, 2.0, 3.0];
+        let vec2 = vec![4.0, 5.0, 6.0];
+        let id1 = index.insert(vec1.clone())?;
+        let id2 = index.insert(vec2.clone())?;
+
+        index.commit(2)?;
+
+        let res = index.search(&vec![1.1, 2.1, 3.1], 1, EPSILON, RADIUS)?;
+        assert_eq!(id1, res[0].id);
+        assert_eq!(vec1, index.get_vec(id1)?);
+
+        index.remove(id1)?;
+
+        let res = index.get_vec(id1);
+        assert!(matches!(res, Result::Err(_)));
+        let res = index.search(&vec![1.1, 2.1, 3.1], 1, EPSILON, RADIUS)?;
+        assert_eq!(id2, res[0].id);
+        assert_eq!(vec2, index.get_vec(id2)?);
+
+        index.persist()?;
+        let index = Index::open(dir.path())?;
+
+        let res = index.get_vec(id1);
+        assert!(matches!(res, Result::Err(_)));
+        let res = index.search(&vec![1.1, 2.1, 3.1], 1, EPSILON, RADIUS)?;
+        assert_eq!(id2, res[0].id);
+        assert_eq!(vec2, index.get_vec(id2)?);
+
+        dir.close()?;
+        Ok(())
+    }
+
+    #[test]
+    fn test_batch() -> StdResult<(), Box<dyn StdError>> {
         let dir = tempdir()?;
         if cfg!(feature = "shared_mem") {
             std::fs::remove_dir(dir.path())?;
@@ -335,13 +380,41 @@ mod tests {
         let vec1 = vec![1.0, 2.0, 3.0];
         let vec2 = vec![4.0, 5.0, 6.0];
 
+        index.insert_batch(vec![vec1, vec2])?;
+        index.commit_and_persist(2)?;
+
+        let res = index.search(&vec![1.1, 2.1, 3.1], 1, EPSILON, RADIUS)?;
+        assert_eq!(1, res[0].id);
+
+        dir.close()?;
+        Ok(())
+    }
+
+    #[test]
+    fn test_uncommitted() -> StdResult<(), Box<dyn StdError>> {
+        let dir = tempdir()?;
+        if cfg!(feature = "shared_mem") {
+            std::fs::remove_dir(dir.path())?;
+        }
+
+        let prop = Properties::new(3)?;
+        let mut index = Index::create(dir.path(), prop)?;
+
+        let res = index.search(&vec![1.1, 2.1, 3.1], 1, EPSILON, RADIUS);
+        assert!(matches!(res, Result::Err(_)));
+
+        let vec1 = vec![1.0, 2.0, 3.0];
+        let vec2 = vec![4.0, 5.0, 6.0];
+
         let id1 = index.insert(vec1.clone())?;
         let id2 = index.insert(vec2.clone())?;
-
-        index.commit(2)?;
-
         assert_eq!(vec1, index.get_vec(id1)?);
         assert_eq!(vec2, index.get_vec(id2)?);
+
+        let res = index.remove(id1);
+        assert!(matches!(res, Result::Err(_)));
+
+        index.commit(2)?;
 
         let res = index.search(&vec![1.1, 2.1, 3.1], 1, EPSILON, RADIUS)?;
         assert_eq!(id1, res[0].id);
@@ -352,29 +425,10 @@ mod tests {
 
         index.persist()?;
         let index = Index::open(dir.path())?;
-        assert_eq!(vec2, index.get_vec(id2)?);
-
-        dir.close()?;
-        Ok(())
-    }
-
-    #[test]
-    fn test_batch() -> std::result::Result<(), Box<dyn std::error::Error>> {
-        let dir = tempdir()?;
-        if cfg!(feature = "shared_mem") {
-            std::fs::remove_dir(dir.path())?;
-        }
-
-        let prop = Properties::new(3)?;
-        let mut index = Index::create(dir.path(), prop)?;
-
-        let vec1 = vec![1.0, 2.0, 3.0];
-        let vec2 = vec![4.0, 5.0, 6.0];
-
-        index.insert_batch_commit(vec![vec1, vec2], 2)?;
 
         let res = index.search(&vec![1.1, 2.1, 3.1], 1, EPSILON, RADIUS)?;
-        assert_eq!(1, res[0].id);
+        assert_eq!(id2, res[0].id);
+        assert_eq!(vec2, index.get_vec(id2)?);
 
         dir.close()?;
         Ok(())
