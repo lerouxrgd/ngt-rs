@@ -22,6 +22,7 @@ pub struct SearchResult {
     pub distance: f32,
 }
 
+#[derive(Debug)]
 pub struct Index {
     path: CString,
     prop: Properties,
@@ -32,15 +33,15 @@ pub struct Index {
 
 impl Index {
     pub fn create<P: AsRef<Path>>(path: P, prop: Properties) -> Result<Self> {
+        if cfg!(feature = "shared_mem") && path.as_ref().exists() {
+            Err(Error(format!("Path {:?} already exists", path.as_ref())))?
+        }
+
         unsafe {
-            if cfg!(feature = "shared_mem") && path.as_ref().exists() {
-                Err(Error(format!("Path {:?} already exists", path.as_ref())))?
-            }
-
-            let path = CString::new(path.as_ref().as_os_str().as_bytes())?;
-
             let ebuf = sys::ngt_create_error_object();
             defer! { sys::ngt_destroy_error_object(ebuf); }
+
+            let path = CString::new(path.as_ref().as_os_str().as_bytes())?;
 
             let index = sys::ngt_create_graph_and_tree(path.as_ptr(), prop.raw_prop, ebuf);
             if index.is_null() {
@@ -70,10 +71,10 @@ impl Index {
 
     pub fn open<P: AsRef<Path>>(path: P) -> Result<Self> {
         unsafe {
-            let path = CString::new(path.as_ref().as_os_str().as_bytes())?;
-
             let ebuf = sys::ngt_create_error_object();
             defer! { sys::ngt_destroy_error_object(ebuf); }
+
+            let path = CString::new(path.as_ref().as_os_str().as_bytes())?;
 
             let index = sys::ngt_open_index(path.as_ptr(), ebuf);
             if index.is_null() {
@@ -104,11 +105,11 @@ impl Index {
         epsilon: f32,
         radius: f32,
     ) -> Result<Vec<SearchResult>> {
-        unsafe {
-            if !self.is_committed {
-                Err(Error("Cannot search vecs in an uncommitted index".into()))?
-            }
+        if !self.is_committed {
+            Err(Error("Cannot search vecs in an uncommitted index".into()))?
+        }
 
+        unsafe {
             let ebuf = sys::ngt_create_error_object();
             defer! { sys::ngt_destroy_error_object(ebuf); }
 
@@ -131,11 +132,7 @@ impl Index {
                 Err(make_err(ebuf))?
             }
 
-            let rsize = sys::ngt_get_size(results, ebuf);
-            if rsize < 0 {
-                Err(make_err(ebuf))?
-            }
-
+            let rsize = sys::ngt_get_result_size(results, ebuf);
             let mut ret = Vec::with_capacity(rsize as usize);
 
             for i in 0..rsize as u32 {
@@ -177,24 +174,24 @@ impl Index {
     }
 
     pub fn insert_batch<F: Into<f64>>(&mut self, batch: Vec<Vec<F>>) -> Result<()> {
-        unsafe {
-            let batch_size = u32::try_from(batch.len())?;
+        let batch_size = u32::try_from(batch.len())?;
 
-            if batch_size > 0 {
-                let dim = batch[0].len();
-                if dim != self.prop.dimension as usize {
-                    Err(Error(
-                        format!(
-                            "Inconsistent batch dim, expected: {} got: {}",
-                            self.prop.dimension, dim
-                        )
-                        .into(),
-                    ))?;
-                }
-            } else {
-                return Ok(());
+        if batch_size > 0 {
+            let dim = batch[0].len();
+            if dim != self.prop.dimension as usize {
+                Err(Error(
+                    format!(
+                        "Inconsistent batch dim, expected: {} got: {}",
+                        self.prop.dimension, dim
+                    )
+                    .into(),
+                ))?;
             }
+        } else {
+            return Ok(());
+        }
 
+        unsafe {
             let ebuf = sys::ngt_create_error_object();
             defer! { sys::ngt_destroy_error_object(ebuf); }
 
@@ -246,11 +243,11 @@ impl Index {
     }
 
     pub fn remove(&mut self, id: VecId) -> Result<()> {
-        unsafe {
-            if !self.is_committed {
-                Err(Error("Cannot remove vec from an uncommitted index".into()))?
-            }
+        if !self.is_committed {
+            Err(Error("Cannot remove vec from an uncommitted index".into()))?
+        }
 
+        unsafe {
             let ebuf = sys::ngt_create_error_object();
             defer! { sys::ngt_destroy_error_object(ebuf); }
 
@@ -303,15 +300,45 @@ impl Index {
             Ok(results)
         }
     }
+
+    pub fn refine_anng(
+        &mut self,
+        epsilon: f32,
+        expected_accuracy: f32,
+        nb_edges: i32,
+        edge_size: i32,
+        batch_size: u64,
+    ) -> Result<()> {
+        if !self.is_committed {
+            Err(Error("Cannot refine an uncommitted index".into()))?
+        }
+
+        unsafe {
+            let ebuf = sys::ngt_create_error_object();
+            defer! { sys::ngt_destroy_error_object(ebuf); }
+
+            if !sys::ngt_refine_anng(
+                self.index,
+                epsilon,
+                expected_accuracy,
+                nb_edges,
+                edge_size,
+                batch_size,
+                ebuf,
+            ) {
+                Err(make_err(ebuf))?
+            }
+
+            Ok(())
+        }
+    }
 }
 
 impl Drop for Index {
     fn drop(&mut self) {
-        unsafe {
-            if !self.index.is_null() {
-                sys::ngt_close_index(self.index);
-                self.index = ptr::null_mut();
-            }
+        if !self.index.is_null() {
+            unsafe { sys::ngt_close_index(self.index) };
+            self.index = ptr::null_mut();
         }
     }
 }
