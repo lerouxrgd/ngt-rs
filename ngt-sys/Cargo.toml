@@ -8,3 +8,7 @@ links = "ngt"
 [build-dependencies]
 bindgen = "0.53"
 cmake = "0.1"
+
+[features]
+shared_mem = []
+large_data = []

@@ -25,6 +25,12 @@ pub(crate) fn make_err(err: sys::NGTError) -> Error {
     Error(err_msg)
 }
 
+impl From<std::io::Error> for Error {
+    fn from(source: std::io::Error) -> Self {
+        Self(source.to_string())
+    }
+}
+
 impl From<std::num::TryFromIntError> for Error {
     fn from(source: std::num::TryFromIntError) -> Self {
         Self(source.to_string())

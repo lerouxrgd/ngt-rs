@@ -34,6 +34,10 @@ pub struct Index {
 impl Index {
     pub fn create<P: AsRef<Path>>(path: P, prop: Properties) -> Result<Self> {
         unsafe {
+            if cfg!(feature = "shared_mem") && path.as_ref().exists() {
+                Err(Error(format!("Path {:?} already exists", path.as_ref())))?
+            }
+
             let path = CString::new(path.as_ref().as_os_str().as_bytes())?;
 
             let ebuf = sys::ngt_create_error_object();
@@ -321,6 +325,9 @@ mod tests {
     #[test]
     fn test_basics() -> std::result::Result<(), Box<dyn std::error::Error>> {
         let dir = tempdir()?;
+        if cfg!(feature = "shared_mem") {
+            std::fs::remove_dir(dir.path())?;
+        }
 
         let prop = Properties::new(3)?;
         let mut index = Index::create(dir.path(), prop)?;
@@ -354,6 +361,9 @@ mod tests {
     #[test]
     fn test_batch() -> std::result::Result<(), Box<dyn std::error::Error>> {
         let dir = tempdir()?;
+        if cfg!(feature = "shared_mem") {
+            std::fs::remove_dir(dir.path())?;
+        }
 
         let prop = Properties::new(3)?;
         let mut index = Index::create(dir.path(), prop)?;

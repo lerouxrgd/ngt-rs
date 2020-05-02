@@ -3,6 +3,15 @@ use std::path::PathBuf;
 
 fn main() {
     let mut config = cmake::Config::new("NGT");
+
+    if env::var("CARGO_FEATURE_SHARED_MEM").is_ok() {
+        config.define("NGT_SHARED_MEMORY_ALLOCATOR", "ON");
+    }
+
+    if env::var("CARGO_FEATURE_LARGE_DATA").is_ok() {
+        config.define("NGT_LARGE_DATASET", "ON");
+    }
+
     let dst = config.build();
 
     println!("cargo:rustc-link-search=native={}/lib", dst.display());

@@ -1,5 +1,5 @@
 [package]
-name = "ngt-rs"
+name = "ngt"
 description = "Rust wrappers for NGT nearest neighbor search"
 version = "0.1.0"
 edition = "2018"
@@ -17,3 +17,7 @@ scopeguard = "1.1"
 
 [dev-dependencies]
 tempfile = "3.1"
+
+[features]
+shared_mem = ["ngt-sys/shared_mem"]
+large_data = ["ngt-sys/large_data"]
