@@ -24,11 +24,12 @@ pub struct SearchResult {
 
 #[derive(Debug)]
 pub struct Index {
-    path: CString,
-    prop: Properties,
-    index: sys::NGTIndex,
-    ospace: sys::NGTObjectSpace,
-    is_committed: bool,
+    pub(crate) path: CString,
+    pub(crate) prop: Properties,
+    pub(crate) index: sys::NGTIndex,
+    pub(crate) ospace: sys::NGTObjectSpace,
+    pub(crate) is_built: bool,
+    ebuf: sys::NGTError,
 }
 
 impl Index {
@@ -64,7 +65,8 @@ impl Index {
                 prop,
                 index,
                 ospace,
-                is_committed: false,
+                is_built: false,
+                ebuf: sys::ngt_create_error_object(),
             })
         }
     }
@@ -93,7 +95,8 @@ impl Index {
                 prop,
                 index,
                 ospace,
-                is_committed: true,
+                is_built: true,
+                ebuf: sys::ngt_create_error_object(),
             })
         }
     }
@@ -101,21 +104,18 @@ impl Index {
     pub fn search(
         &self,
         vec: &[f64],
-        size: u64,
+        res_size: u64,
         epsilon: f32,
         radius: f32,
     ) -> Result<Vec<SearchResult>> {
-        if !self.is_committed {
-            Err(Error("Cannot search vecs in an uncommitted index".into()))?
+        if !self.is_built {
+            Err(Error("Cannot search vecs in an unbuilt index".into()))?
         }
 
         unsafe {
-            let ebuf = sys::ngt_create_error_object();
-            defer! { sys::ngt_destroy_error_object(ebuf); }
-
-            let results = sys::ngt_create_empty_results(ebuf);
+            let results = sys::ngt_create_empty_results(self.ebuf);
             if results.is_null() {
-                Err(make_err(ebuf))?
+                Err(make_err(self.ebuf))?
             }
             defer! { sys::ngt_destroy_results(results); }
 
@@ -123,22 +123,22 @@ impl Index {
                 self.index,
                 vec.as_ptr() as *mut f64,
                 self.prop.dimension,
-                size,
+                res_size,
                 epsilon,
                 radius,
                 results,
-                ebuf,
+                self.ebuf,
             ) {
-                Err(make_err(ebuf))?
+                Err(make_err(self.ebuf))?
             }
 
-            let rsize = sys::ngt_get_result_size(results, ebuf);
+            let rsize = sys::ngt_get_result_size(results, self.ebuf);
             let mut ret = Vec::with_capacity(rsize as usize);
 
             for i in 0..rsize as u32 {
-                let d = sys::ngt_get_result(results, i, ebuf);
+                let d = sys::ngt_get_result(results, i, self.ebuf);
                 if d.id == 0 && d.distance == 0.0 {
-                    Err(make_err(ebuf))?
+                    Err(make_err(self.ebuf))?
                 } else {
                     ret.push(SearchResult {
                         id: d.id,
@@ -153,22 +153,19 @@ impl Index {
 
     pub fn insert<F: Into<f64>>(&mut self, vec: Vec<F>) -> Result<VecId> {
         unsafe {
-            let ebuf = sys::ngt_create_error_object();
-            defer! { sys::ngt_destroy_error_object(ebuf); }
-
             let mut vec = vec.into_iter().map(Into::into).collect::<Vec<f64>>();
 
             let id = sys::ngt_insert_index(
                 self.index,
                 vec.as_mut_ptr(),
                 self.prop.dimension as u32,
-                ebuf,
+                self.ebuf,
             );
             if id == 0 {
-                Err(make_err(ebuf))?
+                Err(make_err(self.ebuf))?
             }
 
-            self.is_committed = false;
+            self.is_built = false;
             Ok(id)
         }
     }
@@ -192,83 +189,60 @@ impl Index {
         }
 
         unsafe {
-            let ebuf = sys::ngt_create_error_object();
-            defer! { sys::ngt_destroy_error_object(ebuf); }
-
             let mut batch = batch
                 .into_iter()
                 .flatten()
                 .map(|v| v.into() as f32)
                 .collect::<Vec<f32>>();
 
-            if !sys::ngt_batch_append_index(self.index, batch.as_mut_ptr(), batch_size, ebuf) {
-                Err(make_err(ebuf))?
+            if !sys::ngt_batch_append_index(self.index, batch.as_mut_ptr(), batch_size, self.ebuf) {
+                Err(make_err(self.ebuf))?
             }
 
-            self.is_committed = false;
+            self.is_built = false;
             Ok(())
         }
     }
 
-    pub fn commit(&mut self, num_threads: u32) -> Result<()> {
+    pub fn build(&mut self, num_threads: u32) -> Result<()> {
         unsafe {
-            let ebuf = sys::ngt_create_error_object();
-            defer! { sys::ngt_destroy_error_object(ebuf); }
-
-            if !sys::ngt_create_index(self.index, num_threads, ebuf) {
-                Err(make_err(ebuf))?
+            if !sys::ngt_create_index(self.index, num_threads, self.ebuf) {
+                Err(make_err(self.ebuf))?
             }
-
-            self.is_committed = true;
+            self.is_built = true;
             Ok(())
         }
-    }
-
-    pub fn commit_and_persist(&mut self, num_threads: u32) -> Result<()> {
-        self.commit(num_threads)?;
-        self.persist()
     }
 
     pub fn persist(&mut self) -> Result<()> {
         unsafe {
-            let ebuf = sys::ngt_create_error_object();
-            defer! { sys::ngt_destroy_error_object(ebuf); }
-
-            if !sys::ngt_save_index(self.index, self.path.as_ptr(), ebuf) {
-                Err(make_err(ebuf))?
+            if !sys::ngt_save_index(self.index, self.path.as_ptr(), self.ebuf) {
+                Err(make_err(self.ebuf))?
             }
-
             Ok(())
         }
     }
 
     pub fn remove(&mut self, id: VecId) -> Result<()> {
-        if !self.is_committed {
-            Err(Error("Cannot remove vec from an uncommitted index".into()))?
+        if !self.is_built {
+            Err(Error("Cannot remove vec from an unbuilt index".into()))?
         }
 
         unsafe {
-            let ebuf = sys::ngt_create_error_object();
-            defer! { sys::ngt_destroy_error_object(ebuf); }
-
-            if !sys::ngt_remove_index(self.index, id, ebuf) {
-                Err(make_err(ebuf))?
+            if !sys::ngt_remove_index(self.index, id, self.ebuf) {
+                Err(make_err(self.ebuf))?
             }
-
             Ok(())
         }
     }
 
     pub fn get_vec(&self, id: VecId) -> Result<Vec<f32>> {
         unsafe {
-            let ebuf = sys::ngt_create_error_object();
-            defer! { sys::ngt_destroy_error_object(ebuf); }
-
             let results = match self.prop.object_type {
                 ObjectType::Float => {
-                    let results = sys::ngt_get_object_as_float(self.ospace, id, ebuf);
+                    let results = sys::ngt_get_object_as_float(self.ospace, id, self.ebuf);
                     if results.is_null() {
-                        Err(make_err(ebuf))?
+                        Err(make_err(self.ebuf))?
                     }
 
                     let results = Vec::from_raw_parts(
@@ -281,9 +255,9 @@ impl Index {
                     results.iter().map(|v| *v).collect::<Vec<_>>()
                 }
                 ObjectType::Uint8 => {
-                    let results = sys::ngt_get_object_as_integer(self.ospace, id, ebuf);
+                    let results = sys::ngt_get_object_as_integer(self.ospace, id, self.ebuf);
                     if results.is_null() {
-                        Err(make_err(ebuf))?
+                        Err(make_err(self.ebuf))?
                     }
 
                     let results = Vec::from_raw_parts(
@@ -300,38 +274,6 @@ impl Index {
             Ok(results)
         }
     }
-
-    pub fn refine_anng(
-        &mut self,
-        epsilon: f32,
-        expected_accuracy: f32,
-        nb_edges: i32,
-        edge_size: i32,
-        batch_size: u64,
-    ) -> Result<()> {
-        if !self.is_committed {
-            Err(Error("Cannot refine an uncommitted index".into()))?
-        }
-
-        unsafe {
-            let ebuf = sys::ngt_create_error_object();
-            defer! { sys::ngt_destroy_error_object(ebuf); }
-
-            if !sys::ngt_refine_anng(
-                self.index,
-                epsilon,
-                expected_accuracy,
-                nb_edges,
-                edge_size,
-                batch_size,
-                ebuf,
-            ) {
-                Err(make_err(ebuf))?
-            }
-
-            Ok(())
-        }
-    }
 }
 
 impl Drop for Index {
@@ -339,6 +281,10 @@ impl Drop for Index {
         if !self.index.is_null() {
             unsafe { sys::ngt_close_index(self.index) };
             self.index = ptr::null_mut();
+        }
+        if !self.ebuf.is_null() {
+            unsafe { sys::ngt_destroy_error_object(self.ebuf) };
+            self.ebuf = ptr::null_mut();
         }
     }
 }
@@ -354,38 +300,50 @@ mod tests {
 
     #[test]
     fn test_basics() -> StdResult<(), Box<dyn StdError>> {
+        // Get a temporary directory to store the index
         let dir = tempdir()?;
         if cfg!(feature = "shared_mem") {
             std::fs::remove_dir(dir.path())?;
         }
 
+        // Create an index for vectors of dimension 3
         let prop = Properties::new(3)?;
         let mut index = Index::create(dir.path(), prop)?;
 
+        // Insert two vectors and get their id
         let vec1 = vec![1.0, 2.0, 3.0];
         let vec2 = vec![4.0, 5.0, 6.0];
         let id1 = index.insert(vec1.clone())?;
         let id2 = index.insert(vec2.clone())?;
 
-        index.commit(2)?;
+        // Actually build the index (not yet persisted on disk)
+        // This is required in order to be able to search/remove vectors
+        index.build(2)?;
 
+        // Perform a vector search (with 1 result)
         let res = index.search(&vec![1.1, 2.1, 3.1], 1, EPSILON, RADIUS)?;
         assert_eq!(id1, res[0].id);
         assert_eq!(vec1, index.get_vec(id1)?);
 
+        // Remove a vector and check that it is not present anymore
         index.remove(id1)?;
-
         let res = index.get_vec(id1);
         assert!(matches!(res, Result::Err(_)));
+
+        // Verify that now our search result is different
         let res = index.search(&vec![1.1, 2.1, 3.1], 1, EPSILON, RADIUS)?;
         assert_eq!(id2, res[0].id);
         assert_eq!(vec2, index.get_vec(id2)?);
 
+        // Persist index on disk, and open it again
         index.persist()?;
-        let index = Index::open(dir.path())?;
+        index = Index::open(dir.path())?;
 
+        // Check that the removed vector wasn't persisted
         let res = index.get_vec(id1);
         assert!(matches!(res, Result::Err(_)));
+
+        // Verify that out search result is still consistent
         let res = index.search(&vec![1.1, 2.1, 3.1], 1, EPSILON, RADIUS)?;
         assert_eq!(id2, res[0].id);
         assert_eq!(vec2, index.get_vec(id2)?);
@@ -396,20 +354,22 @@ mod tests {
 
     #[test]
     fn test_batch() -> StdResult<(), Box<dyn StdError>> {
+        // Get a temporary directory to store the index
         let dir = tempdir()?;
         if cfg!(feature = "shared_mem") {
             std::fs::remove_dir(dir.path())?;
         }
 
+        // Create an index for vectors of dimension 3
         let prop = Properties::new(3)?;
         let mut index = Index::create(dir.path(), prop)?;
 
-        let vec1 = vec![1.0, 2.0, 3.0];
-        let vec2 = vec![4.0, 5.0, 6.0];
+        // Batch insert 2 vectors, build and persist the index
+        index.insert_batch(vec![vec![1.0, 2.0, 3.0], vec![4.0, 5.0, 6.0]])?;
+        index.build(2)?;
+        index.persist()?;
 
-        index.insert_batch(vec![vec1, vec2])?;
-        index.commit_and_persist(2)?;
-
+        // Verify that the index was built correctly with a vector search
         let res = index.search(&vec![1.1, 2.1, 3.1], 1, EPSILON, RADIUS)?;
         assert_eq!(1, res[0].id);
 
@@ -418,41 +378,50 @@ mod tests {
     }
 
     #[test]
-    fn test_uncommitted() -> StdResult<(), Box<dyn StdError>> {
+    fn test_unbuilt() -> StdResult<(), Box<dyn StdError>> {
+        // Get a temporary directory to store the index
         let dir = tempdir()?;
         if cfg!(feature = "shared_mem") {
             std::fs::remove_dir(dir.path())?;
         }
 
+        // Create an index for vectors of dimension 3
         let prop = Properties::new(3)?;
         let mut index = Index::create(dir.path(), prop)?;
 
+        // Verify that we cannot search the index if it is not built
         let res = index.search(&vec![1.1, 2.1, 3.1], 1, EPSILON, RADIUS);
         assert!(matches!(res, Result::Err(_)));
 
+        // Insert two vectors and get their id
         let vec1 = vec![1.0, 2.0, 3.0];
         let vec2 = vec![4.0, 5.0, 6.0];
-
         let id1 = index.insert(vec1.clone())?;
         let id2 = index.insert(vec2.clone())?;
         assert_eq!(vec1, index.get_vec(id1)?);
         assert_eq!(vec2, index.get_vec(id2)?);
 
+        // Verify that we cannot remove from the index if it is not built
         let res = index.remove(id1);
         assert!(matches!(res, Result::Err(_)));
 
-        index.commit(2)?;
+        // Build the index
+        index.build(2)?;
 
+        // Search the index normally
         let res = index.search(&vec![1.1, 2.1, 3.1], 1, EPSILON, RADIUS)?;
         assert_eq!(id1, res[0].id);
 
+        // Correcly remove from the index
         index.remove(id1)?;
         let res = index.get_vec(id1);
         assert!(matches!(res, Result::Err(_)));
 
+        // Persist index on disk, and open it again
         index.persist()?;
         let index = Index::open(dir.path())?;
 
+        // Verify that our modifications were persisted
         let res = index.search(&vec![1.1, 2.1, 3.1], 1, EPSILON, RADIUS)?;
         assert_eq!(id2, res[0].id);
         assert_eq!(vec2, index.get_vec(id2)?);
