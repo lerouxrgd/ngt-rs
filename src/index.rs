@@ -11,13 +11,13 @@ use scopeguard::defer;
 use crate::error::{make_err, Error, Result};
 use crate::properties::{ObjectType, Properties};
 
-pub type VecId = u32;
-
 pub const EPSILON: f32 = 0.1;
+
+pub type VecId = u32;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct SearchResult {
-    pub id: u32,
+    pub id: VecId,
     pub distance: f32,
 }
 
@@ -32,6 +32,7 @@ pub struct Index {
 }
 
 impl Index {
+    /// Create an empty index with the given properies.
     pub fn create<P: AsRef<Path>>(path: P, prop: Properties) -> Result<Self> {
         if cfg!(feature = "shared_mem") && path.as_ref().exists() {
             Err(Error(format!("Path {:?} already exists", path.as_ref())))?
@@ -70,6 +71,7 @@ impl Index {
         }
     }
 
+    /// Open the already existing index at the specified path.
     pub fn open<P: AsRef<Path>>(path: P) -> Result<Self> {
         unsafe {
             let ebuf = sys::ngt_create_error_object();
@@ -100,6 +102,8 @@ impl Index {
         }
     }
 
+    /// Search the nearest vectors to the specified query vector. **The index must have
+    /// been [built](Index::build) beforehand**.
     pub fn search(&self, vec: &[f64], res_size: u64, epsilon: f32) -> Result<Vec<SearchResult>> {
         if !self.is_built {
             Err(Error("Cannot search vecs in an unbuilt index".into()))?
@@ -144,6 +148,9 @@ impl Index {
         }
     }
 
+    /// Insert the specified vector into the index. However note that it is not
+    /// discoverable yet.  **The method [build](Index::build) must be called after
+    /// inserting vectors**.
     pub fn insert<F: Into<f64>>(&mut self, vec: Vec<F>) -> Result<VecId> {
         unsafe {
             let mut vec = vec.into_iter().map(Into::into).collect::<Vec<f64>>();
@@ -163,6 +170,9 @@ impl Index {
         }
     }
 
+    /// Insert the multiple vectors into the index. However note that they are not
+    /// discoverable yet.  **The method [build](Index::build) must be called after
+    /// inserting vectors**.
     pub fn insert_batch<F: Into<f64>>(&mut self, batch: Vec<Vec<F>>) -> Result<()> {
         let batch_size = u32::try_from(batch.len())?;
 
@@ -197,6 +207,7 @@ impl Index {
         }
     }
 
+    /// Build the index for the vectors that have been inserted so far.
     pub fn build(&mut self, num_threads: u32) -> Result<()> {
         unsafe {
             if !sys::ngt_create_index(self.index, num_threads, self.ebuf) {
@@ -207,6 +218,7 @@ impl Index {
         }
     }
 
+    /// Persist the index to the disk.
     pub fn persist(&mut self) -> Result<()> {
         unsafe {
             if !sys::ngt_save_index(self.index, self.path.as_ptr(), self.ebuf) {
@@ -216,6 +228,8 @@ impl Index {
         }
     }
 
+    /// Remove the specified vector. **The index must have been [built](Index::build)
+    /// beforehand**.
     pub fn remove(&mut self, id: VecId) -> Result<()> {
         if !self.is_built {
             Err(Error("Cannot remove vec from an unbuilt index".into()))?
@@ -229,6 +243,7 @@ impl Index {
         }
     }
 
+    /// Get the specified vector.
     pub fn get_vec(&self, id: VecId) -> Result<Vec<f32>> {
         unsafe {
             let results = match self.prop.object_type {
