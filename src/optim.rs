@@ -9,6 +9,7 @@ use scopeguard::defer;
 use crate::error::{make_err, Error, Result};
 use crate::index::Index;
 
+#[cfg(not(shared_mem))]
 pub fn refine_anng(
     index: &mut Index,
     epsilon: f32,
@@ -179,40 +180,6 @@ mod tests {
         refine_anng(&mut index, 0.1, 0.0, 0, i32::MIN, 10000)?;
 
         dir.close()?;
-        Ok(())
-    }
-
-    #[test]
-    fn test_optimizer() -> StdResult<(), Box<dyn StdError>> {
-        // Get a temporary directory to store the index
-        let dir_in = tempdir()?;
-        if cfg!(feature = "shared_mem") {
-            std::fs::remove_dir(dir_in.path())?;
-        }
-
-        // Create an index for vectors of dimension 3 with cosine distance
-        let prop = Properties::new(3)?.distance_type(DistanceType::Cosine)?;
-        let mut index = Index::create(dir_in.path(), prop)?;
-
-        // Populate, build, and persist the index
-        for i in 0..1000 {
-            let _ = index.insert(vec![i, i + 1, i + 2])?;
-        }
-        index.build(2)?;
-        index.persist()?;
-
-        // Close the index (by dropping it)
-        drop(index);
-
-        // let mut optimizer = GraphOptimizer::new(GraphOptimParams::default())?;
-        // optimizer.adjust_search_coefficients(dir_in.path())?;
-
-        // let dir_out = tempdir()?;
-        // std::fs::remove_dir(dir_out.path())?;
-        // optimizer.execute(dir_in.path(), dir_out.path())?;
-
-        // dir_out.close()?;
-        dir_in.close()?;
         Ok(())
     }
 }
