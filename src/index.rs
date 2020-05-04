@@ -13,8 +13,7 @@ use crate::properties::{ObjectType, Properties};
 
 pub type VecId = u32;
 
-pub const EPSILON: f32 = 0.01;
-pub const RADIUS: f32 = -1.0;
+pub const EPSILON: f32 = 0.1;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct SearchResult {
@@ -101,13 +100,7 @@ impl Index {
         }
     }
 
-    pub fn search(
-        &self,
-        vec: &[f64],
-        res_size: u64,
-        epsilon: f32,
-        radius: f32,
-    ) -> Result<Vec<SearchResult>> {
+    pub fn search(&self, vec: &[f64], res_size: u64, epsilon: f32) -> Result<Vec<SearchResult>> {
         if !self.is_built {
             Err(Error("Cannot search vecs in an unbuilt index".into()))?
         }
@@ -125,7 +118,7 @@ impl Index {
                 self.prop.dimension,
                 res_size,
                 epsilon,
-                radius,
+                -1.0,
                 results,
                 self.ebuf,
             ) {
@@ -321,7 +314,7 @@ mod tests {
         index.build(2)?;
 
         // Perform a vector search (with 1 result)
-        let res = index.search(&vec![1.1, 2.1, 3.1], 1, EPSILON, RADIUS)?;
+        let res = index.search(&vec![1.1, 2.1, 3.1], 1, EPSILON)?;
         assert_eq!(id1, res[0].id);
         assert_eq!(vec1, index.get_vec(id1)?);
 
@@ -331,7 +324,7 @@ mod tests {
         assert!(matches!(res, Result::Err(_)));
 
         // Verify that now our search result is different
-        let res = index.search(&vec![1.1, 2.1, 3.1], 1, EPSILON, RADIUS)?;
+        let res = index.search(&vec![1.1, 2.1, 3.1], 1, EPSILON)?;
         assert_eq!(id2, res[0].id);
         assert_eq!(vec2, index.get_vec(id2)?);
 
@@ -344,7 +337,7 @@ mod tests {
         assert!(matches!(res, Result::Err(_)));
 
         // Verify that out search result is still consistent
-        let res = index.search(&vec![1.1, 2.1, 3.1], 1, EPSILON, RADIUS)?;
+        let res = index.search(&vec![1.1, 2.1, 3.1], 1, EPSILON)?;
         assert_eq!(id2, res[0].id);
         assert_eq!(vec2, index.get_vec(id2)?);
 
@@ -370,7 +363,7 @@ mod tests {
         index.persist()?;
 
         // Verify that the index was built correctly with a vector search
-        let res = index.search(&vec![1.1, 2.1, 3.1], 1, EPSILON, RADIUS)?;
+        let res = index.search(&vec![1.1, 2.1, 3.1], 1, EPSILON)?;
         assert_eq!(1, res[0].id);
 
         dir.close()?;
@@ -390,7 +383,7 @@ mod tests {
         let mut index = Index::create(dir.path(), prop)?;
 
         // Verify that we cannot search the index if it is not built
-        let res = index.search(&vec![1.1, 2.1, 3.1], 1, EPSILON, RADIUS);
+        let res = index.search(&vec![1.1, 2.1, 3.1], 1, EPSILON);
         assert!(matches!(res, Result::Err(_)));
 
         // Insert two vectors and get their id
@@ -409,7 +402,7 @@ mod tests {
         index.build(2)?;
 
         // Search the index normally
-        let res = index.search(&vec![1.1, 2.1, 3.1], 1, EPSILON, RADIUS)?;
+        let res = index.search(&vec![1.1, 2.1, 3.1], 1, EPSILON)?;
         assert_eq!(id1, res[0].id);
 
         // Correcly remove from the index
@@ -422,7 +415,7 @@ mod tests {
         let index = Index::open(dir.path())?;
 
         // Verify that our modifications were persisted
-        let res = index.search(&vec![1.1, 2.1, 3.1], 1, EPSILON, RADIUS)?;
+        let res = index.search(&vec![1.1, 2.1, 3.1], 1, EPSILON)?;
         assert_eq!(id2, res[0].id);
         assert_eq!(vec2, index.get_vec(id2)?);
 
