@@ -1,5 +1,6 @@
 use std::convert::TryFrom;
 use std::ffi::CString;
+use std::fs;
 use std::mem;
 use std::os::unix::ffi::OsStrExt;
 use std::path::Path;
@@ -40,6 +41,10 @@ impl Index {
             Err(Error(format!("Path {:?} already exists", path.as_ref())))?
         }
 
+        if let Some(path) = path.as_ref().parent() {
+            fs::create_dir_all(path)?;
+        }
+
         unsafe {
             let ebuf = sys::ngt_create_error_object();
             defer! { sys::ngt_destroy_error_object(ebuf); }
@@ -74,6 +79,10 @@ impl Index {
 
     /// Open the already existing index at the specified path.
     pub fn open<P: AsRef<Path>>(path: P) -> Result<Self> {
+        if !path.as_ref().exists() {
+            Err(Error(format!("Path {:?} does not exist", path.as_ref())))?
+        }
+
         unsafe {
             let ebuf = sys::ngt_create_error_object();
             defer! { sys::ngt_destroy_error_object(ebuf); }

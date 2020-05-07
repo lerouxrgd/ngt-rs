@@ -9,7 +9,7 @@ use scopeguard::defer;
 use crate::error::{make_err, Result};
 use crate::index::Index;
 
-#[cfg(not(shared_mem))]
+#[cfg(not(feature = "shared_mem"))]
 pub fn refine_anng(
     index: &mut Index,
     epsilon: f32,
@@ -216,7 +216,7 @@ mod tests {
     use super::*;
 
     #[test]
-    #[cfg(not(shared_mem))]
+    #[cfg(not(feature = "shared_mem"))]
     fn test_refine_anng() -> StdResult<(), Box<dyn StdError>> {
         // Get a temporary directory to store the index
         let dir = tempdir()?;
