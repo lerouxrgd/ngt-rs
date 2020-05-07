@@ -30,6 +30,9 @@ pub struct Index {
     ebuf: sys::NGTError,
 }
 
+unsafe impl Send for Index {}
+unsafe impl Sync for Index {}
+
 impl Index {
     /// Create an empty index with the given properies.
     pub fn create<P: AsRef<Path>>(path: P, prop: Properties) -> Result<Self> {

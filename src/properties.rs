@@ -36,6 +36,9 @@ pub struct Properties {
     pub(crate) raw_prop: sys::NGTProperty,
 }
 
+unsafe impl Send for Properties {}
+unsafe impl Sync for Properties {}
+
 impl Properties {
     pub fn new(dimension: usize) -> Result<Self> {
         let dimension = i32::try_from(dimension)?;
