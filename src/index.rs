@@ -27,7 +27,6 @@ pub struct Index {
     pub(crate) prop: Properties,
     pub(crate) index: sys::NGTIndex,
     pub(crate) ospace: sys::NGTObjectSpace,
-    pub(crate) is_built: bool,
     ebuf: sys::NGTError,
 }
 
@@ -65,7 +64,6 @@ impl Index {
                 prop,
                 index,
                 ospace,
-                is_built: false,
                 ebuf: sys::ngt_create_error_object(),
             })
         }
@@ -96,7 +94,6 @@ impl Index {
                 prop,
                 index,
                 ospace,
-                is_built: true,
                 ebuf: sys::ngt_create_error_object(),
             })
         }
@@ -105,10 +102,6 @@ impl Index {
     /// Search the nearest vectors to the specified query vector. **The index must have
     /// been [built](Index::build) beforehand**.
     pub fn search(&self, vec: &[f64], res_size: u64, epsilon: f32) -> Result<Vec<SearchResult>> {
-        if !self.is_built {
-            Err(Error("Cannot search vecs in an unbuilt index".into()))?
-        }
-
         unsafe {
             let results = sys::ngt_create_empty_results(self.ebuf);
             if results.is_null() {
@@ -165,7 +158,6 @@ impl Index {
                 Err(make_err(self.ebuf))?
             }
 
-            self.is_built = false;
             Ok(id)
         }
     }
@@ -202,7 +194,6 @@ impl Index {
                 Err(make_err(self.ebuf))?
             }
 
-            self.is_built = false;
             Ok(())
         }
     }
@@ -213,7 +204,6 @@ impl Index {
             if !sys::ngt_create_index(self.index, num_threads, self.ebuf) {
                 Err(make_err(self.ebuf))?
             }
-            self.is_built = true;
             Ok(())
         }
     }
@@ -228,19 +218,18 @@ impl Index {
         }
     }
 
-    /// Remove the specified vector. **The index must have been [built](Index::build)
+    /// Remove the specified vector. **The index should have been [built](Index::build)
     /// beforehand**.
-    pub fn remove(&mut self, id: VecId) -> Result<()> {
-        if !self.is_built {
-            Err(Error("Cannot remove vec from an unbuilt index".into()))?
+    ///
+    /// # Safety
+    ///
+    /// If the specified vector has been inserted but the index hasn't been built yet,
+    /// this will panic (due to the behavior of the underlying NGT library).
+    pub unsafe fn remove(&mut self, id: VecId) -> Result<()> {
+        if !sys::ngt_remove_index(self.index, id, self.ebuf) {
+            Err(make_err(self.ebuf))?
         }
-
-        unsafe {
-            if !sys::ngt_remove_index(self.index, id, self.ebuf) {
-                Err(make_err(self.ebuf))?
-            }
-            Ok(())
-        }
+        Ok(())
     }
 
     /// Get the specified vector.
@@ -334,7 +323,7 @@ mod tests {
         assert_eq!(vec1, index.get_vec(id1)?);
 
         // Remove a vector and check that it is not present anymore
-        index.remove(id1)?;
+        unsafe { index.remove(id1)? };
         let res = index.get_vec(id1);
         assert!(matches!(res, Result::Err(_)));
 
@@ -380,59 +369,6 @@ mod tests {
         // Verify that the index was built correctly with a vector search
         let res = index.search(&vec![1.1, 2.1, 3.1], 1, EPSILON)?;
         assert_eq!(1, res[0].id);
-
-        dir.close()?;
-        Ok(())
-    }
-
-    #[test]
-    fn test_unbuilt() -> StdResult<(), Box<dyn StdError>> {
-        // Get a temporary directory to store the index
-        let dir = tempdir()?;
-        if cfg!(feature = "shared_mem") {
-            std::fs::remove_dir(dir.path())?;
-        }
-
-        // Create an index for vectors of dimension 3
-        let prop = Properties::new(3)?;
-        let mut index = Index::create(dir.path(), prop)?;
-
-        // Verify that we cannot search the index if it is not built
-        let res = index.search(&vec![1.1, 2.1, 3.1], 1, EPSILON);
-        assert!(matches!(res, Result::Err(_)));
-
-        // Insert two vectors and get their id
-        let vec1 = vec![1.0, 2.0, 3.0];
-        let vec2 = vec![4.0, 5.0, 6.0];
-        let id1 = index.insert(vec1.clone())?;
-        let id2 = index.insert(vec2.clone())?;
-        assert_eq!(vec1, index.get_vec(id1)?);
-        assert_eq!(vec2, index.get_vec(id2)?);
-
-        // Verify that we cannot remove from the index if it is not built
-        let res = index.remove(id1);
-        assert!(matches!(res, Result::Err(_)));
-
-        // Build the index
-        index.build(2)?;
-
-        // Search the index normally
-        let res = index.search(&vec![1.1, 2.1, 3.1], 1, EPSILON)?;
-        assert_eq!(id1, res[0].id);
-
-        // Correcly remove from the index
-        index.remove(id1)?;
-        let res = index.get_vec(id1);
-        assert!(matches!(res, Result::Err(_)));
-
-        // Persist index on disk, and open it again
-        index.persist()?;
-        let index = Index::open(dir.path())?;
-
-        // Verify that our modifications were persisted
-        let res = index.search(&vec![1.1, 2.1, 3.1], 1, EPSILON)?;
-        assert_eq!(id2, res[0].id);
-        assert_eq!(vec2, index.get_vec(id2)?);
 
         dir.close()?;
         Ok(())

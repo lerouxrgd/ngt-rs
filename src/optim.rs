@@ -6,7 +6,7 @@ use std::ptr;
 use ngt_sys as sys;
 use scopeguard::defer;
 
-use crate::error::{make_err, Error, Result};
+use crate::error::{make_err, Result};
 use crate::index::Index;
 
 #[cfg(not(shared_mem))]
@@ -18,10 +18,6 @@ pub fn refine_anng(
     edge_size: i32,
     batch_size: u64,
 ) -> Result<()> {
-    if !index.is_built {
-        Err(Error("Cannot refine an unbuilt index".into()))?
-    }
-
     unsafe {
         let ebuf = sys::ngt_create_error_object();
         defer! { sys::ngt_destroy_error_object(ebuf); }
