@@ -8,7 +8,7 @@ description = "Native bindings to the NGT library."
 repository = "https://github.com/lerouxrgd/ngt-rs"
 keywords = ["ngt", "knn", "ann", "optimization"]
 categories = ["science"]
-license = "Apache License 2.0"
+license = "Apache-2.0"
 
 [build-dependencies]
 bindgen = "0.53"

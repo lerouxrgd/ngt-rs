@@ -324,7 +324,7 @@ mod tests {
         let id2 = index.insert(vec2.clone())?;
 
         // Actually build the index (not yet persisted on disk)
-        // This is required in order to be able to search/remove vectors
+        // This is required in order to be able to search vectors
         index.build(2)?;
 
         // Perform a vector search (with 1 result)
