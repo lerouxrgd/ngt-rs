@@ -1,7 +1,9 @@
-# ngt-rs
+# ngt-rs &emsp; [![Latest Version]][crates.io] [![Latest Doc]][docs.rs]
 
-[![Crates.io](https://img.shields.io/crates/v/ngt-rs.svg)](https://crates.io/crates/ngt-rs)
-[![Docs](https://docs.rs/ngt-rs/badge.svg)](https://docs.rs/ngt-rs)
+[Latest Version]: https://img.shields.io/crates/v/ngt.svg
+[crates.io]: https://crates.io/crates/ngt
+[Latest Doc]: https://docs.rs/ngt/badge.svg
+[docs.rs]: https://docs.rs/ngt
 
 <!-- cargo-sync-readme start -->
 
