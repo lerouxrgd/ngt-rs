@@ -297,8 +297,10 @@ impl Drop for Index {
 #[cfg(test)]
 mod tests {
     use std::error::Error as StdError;
+    use std::iter;
     use std::result::Result as StdResult;
 
+    use rayon::prelude::*;
     use tempfile::tempdir;
 
     use super::*;
@@ -377,6 +379,49 @@ mod tests {
         // Verify that the index was built correctly with a vector search
         let res = index.search(&vec![1.1, 2.1, 3.1], 1, EPSILON)?;
         assert_eq!(1, res[0].id);
+
+        dir.close()?;
+        Ok(())
+    }
+
+    #[test]
+    fn test_multithreaded() -> StdResult<(), Box<dyn StdError>> {
+        // Get a temporary directory to store the index
+        let dir = tempdir()?;
+        if cfg!(feature = "shared_mem") {
+            std::fs::remove_dir(dir.path())?;
+        }
+
+        // Create an index for vectors of dimension 3
+        let prop = Properties::new(3)?;
+        let mut index = Index::create(dir.path(), prop)?;
+
+        let vecs = vec![
+            vec![1.0, 2.0, 3.0],
+            vec![4.0, 5.0, 6.0],
+            vec![7.0, 8.0, 9.0],
+            vec![8.0, 7.0, 6.0],
+            vec![5.0, 4.0, 3.0],
+            vec![2.0, 1.0, 6.0],
+        ];
+
+        // Batch insert multiple vectors, build and persist the index
+        index.insert_batch(vecs.clone())?;
+        index.build(2)?;
+        index.persist()?;
+
+        // Search the index with multiple threads
+        iter::repeat(vecs.into_iter())
+            .take(10_000)
+            .flatten()
+            .collect::<Vec<_>>()
+            .into_par_iter()
+            .map(|mut v| {
+                v.iter_mut().for_each(|val| *val += 0.1);
+                v
+            })
+            .map(|v| index.search(&v, 2, EPSILON))
+            .collect::<Result<Vec<_>>>()?;
 
         dir.close()?;
         Ok(())
