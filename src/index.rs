@@ -230,18 +230,14 @@ impl Index {
         }
     }
 
-    /// Remove the specified vector. **The index should have been [built](Index::build)
-    /// beforehand**.
-    ///
-    /// # Safety
-    ///
-    /// If the specified vector has been inserted but the index hasn't been built yet,
-    /// this will panic (due to the behavior of the underlying NGT library).
-    pub unsafe fn remove(&mut self, id: VecId) -> Result<()> {
-        if !sys::ngt_remove_index(self.index, id, self.ebuf) {
-            Err(make_err(self.ebuf))?
+    /// Remove the specified vector.
+    pub fn remove(&mut self, id: VecId) -> Result<()> {
+        unsafe {
+            if !sys::ngt_remove_index(self.index, id, self.ebuf) {
+                Err(make_err(self.ebuf))?
+            }
+            Ok(())
         }
-        Ok(())
     }
 
     /// Get the specified vector.
@@ -335,7 +331,7 @@ mod tests {
         assert_eq!(vec1, index.get_vec(id1)?);
 
         // Remove a vector and check that it is not present anymore
-        unsafe { index.remove(id1)? };
+        index.remove(id1)?;
         let res = index.get_vec(id1);
         assert!(matches!(res, Result::Err(_)));
 

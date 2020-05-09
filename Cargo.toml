@@ -11,7 +11,7 @@ license = "Apache License 2.0"
 readme = "README.md"
 
 [dependencies]
-ngt-sys = { path = "ngt-sys", version = "1.11.1" }
+ngt-sys = { path = "ngt-sys", version = "1.11.4" }
 num_enum = "0.4"
 scopeguard = "1.1"
 
