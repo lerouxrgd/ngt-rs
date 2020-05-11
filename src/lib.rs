@@ -1,7 +1,8 @@
 //! Rust wrappers for [NGT][], which provides high-speed approximate nearest neighbor
 //! searches against a large volume of data.
 //!
-//! Note that NGT's shared memory and large dataset features are available through
+//! Note that NGT will be built dynamically for your target and this requires `cmake`.
+//! Furthermore, NGT's shared memory and large dataset features are available through
 //! cargo features `shared_mem` and `large_data` respectively.
 //!
 //! ## Usage
@@ -67,6 +68,7 @@
 //! // Persist index on disk
 //! index.persist()?;
 //!
+//! # std::fs::remove_dir_all("target/path/to/index/dir").unwrap();
 //! # Ok(())
 //! # }
 //! ```

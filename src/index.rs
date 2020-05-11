@@ -27,7 +27,7 @@ pub struct Index {
     pub(crate) path: CString,
     pub(crate) prop: Properties,
     pub(crate) index: sys::NGTIndex,
-    pub(crate) ospace: sys::NGTObjectSpace,
+    ospace: sys::NGTObjectSpace,
     ebuf: sys::NGTError,
 }
 
