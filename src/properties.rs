@@ -26,7 +26,7 @@ pub enum DistanceType {
     NormalizedCosine = 7,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct Properties {
     pub(crate) dimension: i32,
     pub(crate) creation_edge_size: i16,
@@ -68,6 +68,33 @@ impl Properties {
                 search_edge_size,
                 object_type,
                 distance_type,
+                raw_prop,
+            })
+        }
+    }
+
+    pub fn clone(&self) -> Result<Self> {
+        unsafe {
+            let ebuf = sys::ngt_create_error_object();
+            defer! { sys::ngt_destroy_error_object(ebuf); }
+
+            let raw_prop = sys::ngt_create_property(ebuf);
+            if raw_prop.is_null() {
+                Err(make_err(ebuf))?
+            }
+
+            Self::set_dimension(raw_prop, self.dimension)?;
+            Self::set_creation_edge_size(raw_prop, self.creation_edge_size)?;
+            Self::set_search_edge_size(raw_prop, self.search_edge_size)?;
+            Self::set_object_type(raw_prop, self.object_type)?;
+            Self::set_distance_type(raw_prop, self.distance_type)?;
+
+            Ok(Self {
+                dimension: self.dimension,
+                creation_edge_size: self.creation_edge_size,
+                search_edge_size: self.search_edge_size,
+                object_type: self.object_type,
+                distance_type: self.distance_type,
                 raw_prop,
             })
         }
