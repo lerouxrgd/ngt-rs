@@ -159,6 +159,30 @@ impl GraphOptimizer {
         }
     }
 
+    pub fn set_processing_modes(
+        &mut self,
+        search_param: bool,
+        prefetch_param: bool,
+        accuracy_table: bool,
+    ) -> Result<()> {
+        unsafe {
+            let ebuf = sys::ngt_create_error_object();
+            defer! { sys::ngt_destroy_error_object(ebuf); }
+
+            if !sys::ngt_optimizer_set_processing_modes(
+                self.0,
+                search_param,
+                prefetch_param,
+                accuracy_table,
+                ebuf,
+            ) {
+                Err(make_err(ebuf))?
+            }
+
+            Ok(())
+        }
+    }
+
     pub fn adjust_search_coefficients<P: AsRef<Path>>(&mut self, index_path: P) -> Result<()> {
         let _ = Index::open(&index_path)?;
 
@@ -222,7 +246,7 @@ mod tests {
         let dir = tempdir()?;
 
         // Create an index for vectors of dimension 3 with cosine distance
-        let prop = Properties::new(3)?.distance_type(DistanceType::Cosine)?;
+        let prop = Properties::dimension(3)?.distance_type(DistanceType::Cosine)?;
         let mut index = Index::create(dir.path(), prop)?;
 
         // Populate and build the index
@@ -245,7 +269,7 @@ mod tests {
         let dir = tempdir()?;
 
         // Create an index for vectors of dimension 3 with cosine distance
-        let prop = Properties::new(3)?.distance_type(DistanceType::Cosine)?;
+        let prop = Properties::dimension(3)?.distance_type(DistanceType::Cosine)?;
         let mut index = Index::create(dir.path(), prop)?;
 
         // Populate and build the index
@@ -271,7 +295,7 @@ mod tests {
         }
 
         // Create an index for vectors of dimension 3 with cosine distance
-        let prop = Properties::new(3)?.distance_type(DistanceType::Cosine)?;
+        let prop = Properties::dimension(3)?.distance_type(DistanceType::Cosine)?;
         let mut index = Index::create(dir_in.path(), prop)?;
 
         // Populate, build, and persist the index

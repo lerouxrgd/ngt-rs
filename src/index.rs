@@ -314,7 +314,7 @@ mod tests {
         }
 
         // Create an index for vectors of dimension 3
-        let prop = Properties::new(3)?;
+        let prop = Properties::dimension(3)?;
         let mut index = Index::create(dir.path(), prop)?;
 
         // Insert two vectors and get their id
@@ -368,7 +368,7 @@ mod tests {
         }
 
         // Create an index for vectors of dimension 3
-        let prop = Properties::new(3)?;
+        let prop = Properties::dimension(3)?;
         let mut index = Index::create(dir.path(), prop)?;
 
         // Batch insert 2 vectors, build and persist the index
@@ -393,7 +393,7 @@ mod tests {
         }
 
         // Create an index for vectors of dimension 3
-        let prop = Properties::new(3)?;
+        let prop = Properties::dimension(3)?;
         let mut index = Index::create(dir.path(), prop)?;
 
         let vecs = vec![

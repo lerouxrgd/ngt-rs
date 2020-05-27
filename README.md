@@ -22,10 +22,10 @@ Defining the properties of a new index:
 use ngt::{Properties, DistanceType, ObjectType};
 
 // Defaut properties with vectors of dimension 3
-let prop = Properties::new(3)?;
+let prop = Properties::dimension(3)?;
 
 // Or customize values (here are the defaults)
-let prop = Properties::new(3)?
+let prop = Properties::dimension(3)?
     .creation_edge_size(10)?
     .search_edge_size(40)?
     .object_type(ObjectType::Float)?
@@ -38,7 +38,7 @@ Creating/Opening an index and using it:
 use ngt::{Index, Properties, EPSILON};
 
 // Create a new index
-let prop = Properties::new(3)?;
+let prop = Properties::dimension(3)?;
 let index = Index::create("target/path/to/index/dir", prop)?;
 
 // Open an existing index

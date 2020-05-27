@@ -40,7 +40,7 @@ unsafe impl Send for Properties {}
 unsafe impl Sync for Properties {}
 
 impl Properties {
-    pub fn new(dimension: usize) -> Result<Self> {
+    pub fn dimension(dimension: usize) -> Result<Self> {
         let dimension = i32::try_from(dimension)?;
         let creation_edge_size = 10;
         let search_edge_size = 40;
