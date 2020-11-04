@@ -17,13 +17,15 @@ pub enum ObjectType {
 #[derive(Debug, Clone, Copy, PartialEq, TryFromPrimitive)]
 #[repr(i32)]
 pub enum DistanceType {
-    L1 = 1,
-    L2 = 2,
-    Angle = 3,
-    Hamming = 4,
-    Cosine = 5,
-    NormalizedAngle = 6,
-    NormalizedCosine = 7,
+    L1 = 0,
+    L2 = 1,
+    Angle = 2,
+    Hamming = 3,
+    Cosine = 4,
+    NormalizedAngle = 5,
+    NormalizedCosine = 6,
+    Jaccard = 7,
+    // SparseJaccard = 8,
 }
 
 #[derive(Debug)]
@@ -271,6 +273,11 @@ impl Properties {
             }
             DistanceType::NormalizedCosine => {
                 if !sys::ngt_set_property_distance_type_normalized_cosine(raw_prop, ebuf) {
+                    Err(make_err(ebuf))?
+                }
+            }
+            DistanceType::Jaccard => {
+                if !sys::ngt_set_property_distance_type_jaccard(raw_prop, ebuf) {
                     Err(make_err(ebuf))?
                 }
             }

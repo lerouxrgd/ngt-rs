@@ -79,6 +79,7 @@ impl AnngEdgeOptimParams {
     }
 }
 
+#[cfg(not(feature = "shared_mem"))]
 pub fn optimize_edges_number<P: AsRef<Path>>(
     index_path: P,
     params: AnngEdgeOptimParams,
