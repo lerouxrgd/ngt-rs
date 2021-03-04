@@ -9,26 +9,64 @@ use scopeguard::defer;
 use crate::error::{make_err, Result};
 use crate::index::Index;
 
+/// Optimizes the number of initial edges of an ANNG index.
+///
+/// The default number of initial edges for each node in a default graph (ANNG) is a
+/// fixed value 10. To optimize this number, follow these steps:
+///   1. [`insert`](Index::insert) vectors in the ANNG index at `index_path`, don't
+///   [`build`](Index::build) the index yet.
+///   2. When all vectors are inserted, [`persist`](Index::persist) the index.
+///   3. Call this function with the same `index_path`.
+///   4. [`open`](Index::open) the index at `index_path` again, and now
+///   [`build`](Index::build) it.
 #[cfg(not(feature = "shared_mem"))]
-pub fn refine_anng(
-    index: &mut Index,
-    epsilon: f32,
-    expected_accuracy: f32,
-    nb_edges: i32,
-    edge_size: i32,
-    batch_size: u64,
+pub fn optimize_anng_edges_number<P: AsRef<Path>>(
+    index_path: P,
+    params: AnngEdgeOptimParams,
 ) -> Result<()> {
+    unsafe {
+        let ebuf = sys::ngt_create_error_object();
+        defer! { sys::ngt_destroy_error_object(ebuf); }
+
+        let index_path = CString::new(index_path.as_ref().as_os_str().as_bytes())?;
+
+        if !sys::ngt_optimize_number_of_edges(index_path.as_ptr(), params.into_raw(), ebuf) {
+            Err(make_err(ebuf))?
+        }
+
+        Ok(())
+    }
+}
+
+/// Optimizes the search parameters of an ANNG index.
+///
+/// Optimizes the search parameters about the explored edges and memory prefetch for the
+/// existing indexes. Does not modify the index data structure.
+pub fn optimize_anng_search_parameters<P: AsRef<Path>>(index_path: P) -> Result<()> {
+    let mut optimizer = GraphOptimizer::new(GraphOptimParams::default())?;
+    optimizer.set_processing_modes(true, true, true)?;
+    optimizer.adjust_search_coefficients(index_path)?;
+    Ok(())
+}
+
+/// Refines an ANNG index (RANNG) to improve search performance.
+///
+/// Improves accuracy of neighboring nodes for each node by searching with each
+/// node. Note that refinement takes a long processing time. An ANNG index can be
+/// refined only after it has been [`built`](Index::build).
+#[cfg(not(feature = "shared_mem"))]
+pub fn refine_anng(index: &mut Index, params: AnngRefineParams) -> Result<()> {
     unsafe {
         let ebuf = sys::ngt_create_error_object();
         defer! { sys::ngt_destroy_error_object(ebuf); }
 
         if !sys::ngt_refine_anng(
             index.index,
-            epsilon,
-            expected_accuracy,
-            nb_edges,
-            edge_size,
-            batch_size,
+            params.epsilon,
+            params.expected_accuracy,
+            params.nb_edges,
+            params.edge_size,
+            params.batch_size,
             ebuf,
         ) {
             Err(make_err(ebuf))?
@@ -38,6 +76,31 @@ pub fn refine_anng(
     }
 }
 
+/// Converts the `index_in` ANNG to an ONNG at `index_out`.
+///
+/// ONNG generation requires an ANNG with more edges than default initial edges as the
+/// excess edges are removed to optimize the graph. ONNG requires an ANNG with at least
+/// edges that have been optimized with
+/// [`optimize_anng_edges_number`](optimize_anng_edges_number).
+///
+/// If more performance is needed, a larger `creation_edge_size` can be set through
+/// [`Properties`](crate::Properties::creation_edge_size) at ANNG index
+/// [`create`](Index::create) time.
+///
+/// Important [`GraphOptimParams`](GraphOptimParams) parameters are `nb_outgoing` edges
+/// and `nb_incoming` edges. The latter can be set to an even higher number than the
+/// `creation_edge_size` of the original ANNG.
+pub fn convert_anng_to_onng<P: AsRef<Path>>(
+    index_anng_in: P,
+    index_onng_out: P,
+    params: GraphOptimParams,
+) -> Result<()> {
+    let mut optimizer = GraphOptimizer::new(params)?;
+    optimizer.convert_anng_to_onng(index_anng_in, index_onng_out)?;
+    Ok(())
+}
+
+/// Parameters for [`optimize_anng_edges_number`](optimize_anng_edges_number).
 #[derive(Debug, Clone, PartialEq)]
 pub struct AnngEdgeOptimParams {
     pub nb_queries: u64,
@@ -79,25 +142,29 @@ impl AnngEdgeOptimParams {
     }
 }
 
-#[cfg(not(feature = "shared_mem"))]
-pub fn optimize_edges_number<P: AsRef<Path>>(
-    index_path: P,
-    params: AnngEdgeOptimParams,
-) -> Result<()> {
-    unsafe {
-        let ebuf = sys::ngt_create_error_object();
-        defer! { sys::ngt_destroy_error_object(ebuf); }
+/// Parameters for [`refine_anng`](refine_anng).
+#[derive(Debug, Clone, PartialEq)]
+pub struct AnngRefineParams {
+    epsilon: f32,
+    expected_accuracy: f32,
+    nb_edges: i32,
+    edge_size: i32,
+    batch_size: u64,
+}
 
-        let index_path = CString::new(index_path.as_ref().as_os_str().as_bytes())?;
-
-        if !sys::ngt_optimize_number_of_edges(index_path.as_ptr(), params.into_raw(), ebuf) {
-            Err(make_err(ebuf))?
+impl Default for AnngRefineParams {
+    fn default() -> Self {
+        Self {
+            epsilon: 0.1,
+            expected_accuracy: 0.0,
+            nb_edges: 0,
+            edge_size: i32::MIN,
+            batch_size: 10000,
         }
-
-        Ok(())
     }
 }
 
+/// Parameters for [`convert_anng_to_onng`](convert_anng_to_onng).
 #[derive(Debug, Clone, PartialEq)]
 pub struct GraphOptimParams {
     pub nb_outgoing: i32,
@@ -127,10 +194,10 @@ impl Default for GraphOptimParams {
     }
 }
 
-pub struct GraphOptimizer(sys::NGTOptimizer);
+struct GraphOptimizer(sys::NGTOptimizer);
 
 impl GraphOptimizer {
-    pub fn new(params: GraphOptimParams) -> Result<Self> {
+    fn new(params: GraphOptimParams) -> Result<Self> {
         unsafe {
             let ebuf = sys::ngt_create_error_object();
             defer! { sys::ngt_destroy_error_object(ebuf); }
@@ -160,7 +227,7 @@ impl GraphOptimizer {
         }
     }
 
-    pub fn set_processing_modes(
+    fn set_processing_modes(
         &mut self,
         search_param: bool,
         prefetch_param: bool,
@@ -184,7 +251,8 @@ impl GraphOptimizer {
         }
     }
 
-    pub fn adjust_search_coefficients<P: AsRef<Path>>(&mut self, index_path: P) -> Result<()> {
+    /// Optimize for the search parameters of an ANNG.
+    fn adjust_search_coefficients<P: AsRef<Path>>(&mut self, index_path: P) -> Result<()> {
         let _ = Index::open(&index_path)?;
 
         unsafe {
@@ -201,15 +269,20 @@ impl GraphOptimizer {
         }
     }
 
-    pub fn execute<P: AsRef<Path>>(&mut self, index_in: P, index_out: P) -> Result<()> {
-        let _ = Index::open(&index_in)?;
+    /// Converts the `index_in` ANNG to an ONNG at `index_out`.
+    fn convert_anng_to_onng<P: AsRef<Path>>(
+        &mut self,
+        index_anng_in: P,
+        index_onng_out: P,
+    ) -> Result<()> {
+        let _ = Index::open(&index_anng_in)?;
 
         unsafe {
             let ebuf = sys::ngt_create_error_object();
             defer! { sys::ngt_destroy_error_object(ebuf); }
 
-            let index_in = CString::new(index_in.as_ref().as_os_str().as_bytes())?;
-            let index_out = CString::new(index_out.as_ref().as_os_str().as_bytes())?;
+            let index_in = CString::new(index_anng_in.as_ref().as_os_str().as_bytes())?;
+            let index_out = CString::new(index_onng_out.as_ref().as_os_str().as_bytes())?;
 
             if !sys::ngt_optimizer_execute(self.0, index_in.as_ptr(), index_out.as_ptr(), ebuf) {
                 Err(make_err(ebuf))?
@@ -240,6 +313,38 @@ mod tests {
 
     use super::*;
 
+    #[ignore]
+    #[test]
+    #[cfg(not(feature = "shared_mem"))]
+    fn test_optimize_anng() -> StdResult<(), Box<dyn StdError>> {
+        // Get a temporary directory to store the index
+        let dir = tempdir()?;
+
+        // Create an index for vectors of dimension 3 with cosine distance
+        let prop = Properties::dimension(3)?.distance_type(DistanceType::Cosine)?;
+        let mut index = Index::create(dir.path(), prop)?;
+
+        // Populate the index, but don't build it yet
+        for i in 0..1_000_000 {
+            let _ = index.insert(vec![i, i + 1, i + 2])?;
+        }
+        index.persist()?;
+
+        // Optimize the persisted index
+        optimize_anng_edges_number(dir.path(), AnngEdgeOptimParams::default())?;
+
+        // Now build and persist again the optimized index
+        let mut index = Index::open(dir.path())?;
+        index.build(4)?;
+        index.persist()?;
+
+        // Further optimize the index
+        optimize_anng_search_parameters(dir.path())?;
+
+        dir.close()?;
+        Ok(())
+    }
+
     #[test]
     #[cfg(not(feature = "shared_mem"))]
     fn test_refine_anng() -> StdResult<(), Box<dyn StdError>> {
@@ -256,8 +361,8 @@ mod tests {
         }
         index.build(4)?;
 
-        // Optimize the index
-        refine_anng(&mut index, 0.1, 0.0, 0, i32::MIN, 10000)?;
+        // Refine the index
+        refine_anng(&mut index, AnngRefineParams::default())?;
 
         dir.close()?;
         Ok(())
@@ -265,60 +370,41 @@ mod tests {
 
     #[ignore]
     #[test]
-    fn test_optimize_edges_number() -> StdResult<(), Box<dyn StdError>> {
-        // Get a temporary directory to store the index
-        let dir = tempdir()?;
-
-        // Create an index for vectors of dimension 3 with cosine distance
-        let prop = Properties::dimension(3)?.distance_type(DistanceType::Cosine)?;
-        let mut index = Index::create(dir.path(), prop)?;
-
-        // Populate and build the index
-        for i in 0..100_000 {
-            let _ = index.insert(vec![i, i + 1, i + 2])?;
-        }
-        index.build(4)?;
-
-        // Optimize the index
-        optimize_edges_number(dir.path(), AnngEdgeOptimParams::default())?;
-
-        dir.close()?;
-        Ok(())
-    }
-
-    #[ignore]
-    #[test]
-    fn test_graph_optimizer() -> StdResult<(), Box<dyn StdError>> {
-        // Get a temporary directory to store the index
+    #[cfg(not(feature = "shared_mem"))]
+    fn test_convert_anng_to_onng() -> StdResult<(), Box<dyn StdError>> {
+        // Get a temporary directory to store the ANNG index
         let dir_in = tempdir()?;
-        if cfg!(feature = "shared_mem") {
-            std::fs::remove_dir(dir_in.path())?;
-        }
 
         // Create an index for vectors of dimension 3 with cosine distance
-        let prop = Properties::dimension(3)?.distance_type(DistanceType::Cosine)?;
+        let prop = Properties::dimension(3)?
+            .distance_type(DistanceType::Cosine)?
+            .creation_edge_size(100)?; // More than default value, improves the final ONNG
+
         let mut index = Index::create(dir_in.path(), prop)?;
 
-        // Populate, build, and persist the index
+        // Populate and persist (but don't build yet) the index
         for i in 0..1000 {
             let _ = index.insert(vec![i, i + 1, i + 2])?;
         }
-        index.build(2)?;
         index.persist()?;
 
-        // Close the index (by dropping it)
-        drop(index);
+        // Optimize and build the index
+        optimize_anng_edges_number(dir_in.path(), AnngEdgeOptimParams::default())?;
 
-        // Create a index optimizer
-        let mut optimizer = GraphOptimizer::new(GraphOptimParams::default())?;
-        optimizer.adjust_search_coefficients(dir_in.path())?;
+        // Now build and persist again the optimized index
+        let mut index = Index::open(dir_in.path())?;
+        index.build(4)?;
+        index.persist()?;
 
-        // Create an output directory for the optimized index
+        // Create an output directory for the ONNG index
         let dir_out = tempdir()?;
         std::fs::remove_dir(dir_out.path())?;
 
         // Convert the input ANNG to an ONNG
-        optimizer.execute(dir_in.path(), dir_out.path())?;
+        let mut params = GraphOptimParams::default();
+        params.nb_outgoing = 10;
+        params.nb_incoming = 100; // An even larger number of incoming edges can be specified
+        convert_anng_to_onng(dir_in.path(), dir_out.path(), params)?;
 
         dir_out.close()?;
         dir_in.close()?;

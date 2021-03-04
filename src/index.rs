@@ -35,7 +35,7 @@ unsafe impl Send for Index {}
 unsafe impl Sync for Index {}
 
 impl Index {
-    /// Create an empty index with the given properies.
+    /// Creates an empty ANNG index with the given [`Properties`]().
     pub fn create<P: AsRef<Path>>(path: P, prop: Properties) -> Result<Self> {
         if cfg!(feature = "shared_mem") && path.as_ref().exists() {
             Err(Error(format!("Path {:?} already exists", path.as_ref())))?
@@ -111,8 +111,9 @@ impl Index {
         }
     }
 
-    /// Search the nearest vectors to the specified query vector. **The index must have
-    /// been [built](Index::build) beforehand**.
+    /// Search the nearest vectors to the specified query vector.
+    ///
+    /// **The index must have been [`built`](Index::build) beforehand**.
     pub fn search(&self, vec: &[f64], res_size: u64, epsilon: f32) -> Result<Vec<SearchResult>> {
         unsafe {
             let results = sys::ngt_create_empty_results(self.ebuf);
@@ -154,8 +155,9 @@ impl Index {
     }
 
     /// Insert the specified vector into the index. However note that it is not
-    /// discoverable yet.  **The method [build](Index::build) must be called after
-    /// inserting vectors**.
+    /// discoverable yet.
+    ///
+    /// **The method [`build`](Index::build) must be called after inserting vectors**.
     pub fn insert<F: Into<f64>>(&mut self, vec: Vec<F>) -> Result<VecId> {
         unsafe {
             let mut vec = vec.into_iter().map(Into::into).collect::<Vec<f64>>();
@@ -175,8 +177,9 @@ impl Index {
     }
 
     /// Insert the multiple vectors into the index. However note that they are not
-    /// discoverable yet.  **The method [build](Index::build) must be called after
-    /// inserting vectors**.
+    /// discoverable yet.
+    ///
+    /// **The method [`build`](Index::build) must be called after inserting vectors**.
     pub fn insert_batch<F: Into<f64>>(&mut self, batch: Vec<Vec<F>>) -> Result<()> {
         let batch_size = u32::try_from(batch.len())?;
 
