@@ -297,6 +297,229 @@ impl Drop for Index {
     }
 }
 
+#[derive(Debug)]
+pub struct QGIndex {
+    pub(crate) path: CString,
+    pub(crate) prop: Properties,
+    pub(crate) index: sys::NGTQGIndex,
+    ebuf: sys::NGTError,
+}
+
+impl QGIndex {
+    pub fn quantize(index: Index, params: QGQuantizationParams) -> Result<Self> {
+        unsafe {
+            let ebuf = sys::ngt_create_error_object();
+            defer! { sys::ngt_destroy_error_object(ebuf); }
+
+            let path = index.path.clone();
+
+            drop(index); // Close the index
+            if !sys::ngtqg_quantize(path.as_ptr(), params.into_raw(), ebuf) {
+                Err(make_err(ebuf))?
+            }
+
+            QGIndex::open(path.to_str().unwrap())
+        }
+    }
+
+    /// Open the already existing quantized index at the specified path.
+    pub fn open<P: AsRef<Path>>(path: P) -> Result<Self> {
+        if !path.as_ref().exists() {
+            Err(Error(format!("Path {:?} does not exist", path.as_ref())))?
+        }
+
+        unsafe {
+            let ebuf = sys::ngt_create_error_object();
+            defer! { sys::ngt_destroy_error_object(ebuf); }
+
+            let path = CString::new(path.as_ref().as_os_str().as_bytes())?;
+
+            let index = sys::ngtqg_open_index(path.as_ptr(), ebuf);
+            if index.is_null() {
+                Err(make_err(ebuf))?
+            }
+
+            let prop = Properties::from(index)?;
+
+            Ok(QGIndex {
+                path,
+                prop,
+                index,
+                ebuf: sys::ngt_create_error_object(),
+            })
+        }
+    }
+
+    pub fn search(&self, query: QGQuery) -> Result<Vec<SearchResult>> {
+        unsafe {
+            let results = sys::ngt_create_empty_results(self.ebuf);
+            if results.is_null() {
+                Err(make_err(self.ebuf))?
+            }
+            defer! { sys::ngt_destroy_results(results); }
+
+            if !sys::ngtqg_search_index(self.index, query.into_raw(), results, self.ebuf) {
+                Err(make_err(self.ebuf))?
+            }
+
+            let rsize = sys::ngt_get_result_size(results, self.ebuf);
+            let mut ret = Vec::with_capacity(rsize as usize);
+
+            for i in 0..rsize as u32 {
+                let d = sys::ngt_get_result(results, i, self.ebuf);
+                if d.id == 0 && d.distance == 0.0 {
+                    Err(make_err(self.ebuf))?
+                } else {
+                    ret.push(SearchResult {
+                        id: d.id,
+                        distance: d.distance,
+                    });
+                }
+            }
+
+            Ok(ret)
+        }
+    }
+
+    /// Get the specified vector.
+    pub fn get_vec(&self, id: VecId) -> Result<Vec<f32>> {
+        unsafe {
+            let results = match self.prop.object_type {
+                ObjectType::Float => {
+                    let ospace = sys::ngt_get_object_space(self.index, self.ebuf);
+                    if ospace.is_null() {
+                        Err(make_err(self.ebuf))?
+                    }
+
+                    let results = sys::ngt_get_object_as_float(ospace, id, self.ebuf);
+                    if results.is_null() {
+                        Err(make_err(self.ebuf))?
+                    }
+
+                    let results = Vec::from_raw_parts(
+                        results as *mut f32,
+                        self.prop.dimension as usize,
+                        self.prop.dimension as usize,
+                    );
+                    let results = mem::ManuallyDrop::new(results);
+
+                    results.iter().map(|v| *v).collect::<Vec<_>>()
+                }
+                ObjectType::Uint8 => {
+                    let ospace = sys::ngt_get_object_space(self.index, self.ebuf);
+                    if ospace.is_null() {
+                        Err(make_err(self.ebuf))?
+                    }
+
+                    let results = sys::ngt_get_object_as_integer(ospace, id, self.ebuf);
+                    if results.is_null() {
+                        Err(make_err(self.ebuf))?
+                    }
+
+                    let results = Vec::from_raw_parts(
+                        results as *mut u8,
+                        self.prop.dimension as usize,
+                        self.prop.dimension as usize,
+                    );
+                    let results = mem::ManuallyDrop::new(results);
+
+                    results.iter().map(|byte| *byte as f32).collect::<Vec<_>>()
+                }
+            };
+
+            Ok(results)
+        }
+    }
+}
+
+impl Drop for QGIndex {
+    fn drop(&mut self) {
+        if !self.index.is_null() {
+            unsafe { sys::ngtqg_close_index(self.index) };
+            self.index = ptr::null_mut();
+        }
+        if !self.ebuf.is_null() {
+            unsafe { sys::ngt_destroy_error_object(self.ebuf) };
+            self.ebuf = ptr::null_mut();
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct QGQuantizationParams {
+    pub dimension_of_subvector: f32,
+    pub max_number_of_edges: u64,
+}
+
+impl Default for QGQuantizationParams {
+    fn default() -> Self {
+        Self {
+            dimension_of_subvector: 0.0,
+            max_number_of_edges: 128,
+        }
+    }
+}
+
+impl QGQuantizationParams {
+    unsafe fn into_raw(self) -> sys::NGTQGQuantizationParameters {
+        sys::NGTQGQuantizationParameters {
+            dimension_of_subvector: self.dimension_of_subvector,
+            max_number_of_edges: self.max_number_of_edges,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct QGQuery<'a> {
+    query: &'a [f32],
+    pub size: u64,
+    pub epsilon: f32,
+    pub result_expansion: f32,
+    pub radius: f32,
+}
+
+impl<'a> QGQuery<'a> {
+    pub fn new(query: &'a [f32]) -> Self {
+        Self {
+            query,
+            size: 20,
+            epsilon: 0.03,
+            result_expansion: 3.0,
+            radius: f32::MAX,
+        }
+    }
+
+    pub fn size(mut self, size: u64) -> Self {
+        self.size = size;
+        self
+    }
+
+    pub fn epsilon(mut self, epsilon: f32) -> Self {
+        self.epsilon = epsilon;
+        self
+    }
+
+    pub fn result_expansion(mut self, result_expansion: f32) -> Self {
+        self.result_expansion = result_expansion;
+        self
+    }
+
+    pub fn radius(mut self, radius: f32) -> Self {
+        self.radius = radius;
+        self
+    }
+
+    unsafe fn into_raw(self) -> sys::NGTQGQuery {
+        sys::NGTQGQuery {
+            query: self.query.as_ptr() as *mut f32,
+            size: self.size,
+            epsilon: self.epsilon,
+            result_expansion: self.result_expansion,
+            radius: self.radius,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::error::Error as StdError;
@@ -425,6 +648,42 @@ mod tests {
             })
             .map(|v| index.search(&v, 2, EPSILON))
             .collect::<Result<Vec<_>>>()?;
+
+        dir.close()?;
+        Ok(())
+    }
+
+    #[test]
+    fn test_quantize() -> StdResult<(), Box<dyn StdError>> {
+        // Get a temporary directory to store the index
+        let dir = tempdir()?;
+        if cfg!(feature = "shared_mem") {
+            std::fs::remove_dir(dir.path())?;
+        }
+
+        // Create an index for vectors of dimension 3
+        let prop = Properties::dimension(3)?;
+        let mut index = Index::create(dir.path(), prop)?;
+
+        // Insert two vectors and get their id
+        let vec1 = vec![1.0, 2.0, 3.0];
+        let vec2 = vec![4.0, 5.0, 6.0];
+        let id1 = index.insert(vec1.clone())?;
+        let _id2 = index.insert(vec2.clone())?;
+
+        // Build and persist the index
+        index.build(1)?;
+        index.persist()?;
+
+        let params = QGQuantizationParams::default();
+        let index = QGIndex::quantize(index, params)?;
+
+        // Perform a vector search (with 1 result)
+        let vec = vec![1.1, 2.1, 3.1];
+        let query = QGQuery::new(&vec).size(2);
+        let res = index.search(query)?;
+        assert_eq!(id1, res[0].id);
+        assert_eq!(vec1, index.get_vec(id1)?);
 
         dir.close()?;
         Ok(())
