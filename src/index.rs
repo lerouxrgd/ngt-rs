@@ -297,6 +297,7 @@ impl Drop for Index {
     }
 }
 
+#[cfg(not(feature = "shared_mem"))]
 #[derive(Debug)]
 pub struct QGIndex {
     pub(crate) path: CString,
@@ -305,6 +306,7 @@ pub struct QGIndex {
     ebuf: sys::NGTError,
 }
 
+#[cfg(not(feature = "shared_mem"))]
 impl QGIndex {
     pub fn quantize(index: Index, params: QGQuantizationParams) -> Result<Self> {
         unsafe {
@@ -432,6 +434,7 @@ impl QGIndex {
     }
 }
 
+#[cfg(not(feature = "shared_mem"))]
 impl Drop for QGIndex {
     fn drop(&mut self) {
         if !self.index.is_null() {
@@ -445,12 +448,14 @@ impl Drop for QGIndex {
     }
 }
 
+#[cfg(not(feature = "shared_mem"))]
 #[derive(Debug, Clone, PartialEq)]
 pub struct QGQuantizationParams {
     pub dimension_of_subvector: f32,
     pub max_number_of_edges: u64,
 }
 
+#[cfg(not(feature = "shared_mem"))]
 impl Default for QGQuantizationParams {
     fn default() -> Self {
         Self {
@@ -460,6 +465,7 @@ impl Default for QGQuantizationParams {
     }
 }
 
+#[cfg(not(feature = "shared_mem"))]
 impl QGQuantizationParams {
     unsafe fn into_raw(self) -> sys::NGTQGQuantizationParameters {
         sys::NGTQGQuantizationParameters {
@@ -469,6 +475,7 @@ impl QGQuantizationParams {
     }
 }
 
+#[cfg(not(feature = "shared_mem"))]
 #[derive(Debug, Clone, PartialEq)]
 pub struct QGQuery<'a> {
     query: &'a [f32],
@@ -478,6 +485,7 @@ pub struct QGQuery<'a> {
     pub radius: f32,
 }
 
+#[cfg(not(feature = "shared_mem"))]
 impl<'a> QGQuery<'a> {
     pub fn new(query: &'a [f32]) -> Self {
         Self {
@@ -653,6 +661,7 @@ mod tests {
         Ok(())
     }
 
+    #[cfg(not(feature = "shared_mem"))]
     #[test]
     fn test_quantize() -> StdResult<(), Box<dyn StdError>> {
         // Get a temporary directory to store the index
