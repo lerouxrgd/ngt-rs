@@ -154,6 +154,47 @@ impl Index {
         }
     }
 
+    /// Search linearly the nearest vectors to the specified query vector.
+    ///
+    /// **The index must have been [`built`](Index::build) beforehand**.
+    pub fn linear_search(&self, vec: &[f64], res_size: u64) -> Result<Vec<SearchResult>> {
+        unsafe {
+            let results = sys::ngt_create_empty_results(self.ebuf);
+            if results.is_null() {
+                Err(make_err(self.ebuf))?
+            }
+            defer! { sys::ngt_destroy_results(results); }
+
+            if !sys::ngt_linear_search_index(
+                self.index,
+                vec.as_ptr() as *mut f64,
+                self.prop.dimension,
+                res_size,
+                results,
+                self.ebuf,
+            ) {
+                Err(make_err(self.ebuf))?
+            }
+
+            let rsize = sys::ngt_get_result_size(results, self.ebuf);
+            let mut ret = Vec::with_capacity(rsize as usize);
+
+            for i in 0..rsize as u32 {
+                let d = sys::ngt_get_result(results, i, self.ebuf);
+                if d.id == 0 && d.distance == 0.0 {
+                    Err(make_err(self.ebuf))?
+                } else {
+                    ret.push(SearchResult {
+                        id: d.id,
+                        distance: d.distance,
+                    });
+                }
+            }
+
+            Ok(ret)
+        }
+    }
+
     /// Insert the specified vector into the index. However note that it is not
     /// discoverable yet.
     ///
@@ -563,6 +604,11 @@ mod tests {
 
         // Perform a vector search (with 1 result)
         let res = index.search(&vec![1.1, 2.1, 3.1], 1, EPSILON)?;
+        assert_eq!(id1, res[0].id);
+        assert_eq!(vec1, index.get_vec(id1)?);
+
+        // Perform a linear vector search (with 1 result)
+        let res = index.linear_search(&vec![1.1, 2.1, 3.1], 1)?;
         assert_eq!(id1, res[0].id);
         assert_eq!(vec1, index.get_vec(id1)?);
 

@@ -1,6 +1,6 @@
 [package]
 name = "ngt"
-version = "0.4.0"
+version = "0.4.1"
 authors = ["Romain Leroux <romain@leroux.dev>"]
 edition = "2018"
 description = "Rust wrappers for NGT nearest neighbor search."
@@ -11,7 +11,7 @@ license = "Apache-2.0"
 readme = "README.md"
 
 [dependencies]
-ngt-sys = { path = "ngt-sys", version = "1.13.7" }
+ngt-sys = { path = "ngt-sys", version = "1.13.8" }
 num_enum = "0.5"
 scopeguard = "1"
 
