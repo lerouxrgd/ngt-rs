@@ -75,7 +75,7 @@ impl Properties {
         }
     }
 
-    pub fn clone(&self) -> Result<Self> {
+    pub fn try_clone(&self) -> Result<Self> {
         unsafe {
             let ebuf = sys::ngt_create_error_object();
             defer! { sys::ngt_destroy_error_object(ebuf); }

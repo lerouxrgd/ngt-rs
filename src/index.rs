@@ -227,13 +227,10 @@ impl Index {
         if batch_size > 0 {
             let dim = batch[0].len();
             if dim != self.prop.dimension as usize {
-                Err(Error(
-                    format!(
-                        "Inconsistent batch dim, expected: {} got: {}",
-                        self.prop.dimension, dim
-                    )
-                    .into(),
-                ))?;
+                Err(Error(format!(
+                    "Inconsistent batch dim, expected: {} got: {}",
+                    self.prop.dimension, dim
+                )))?;
             }
         } else {
             return Ok(());
@@ -301,7 +298,7 @@ impl Index {
                     );
                     let results = mem::ManuallyDrop::new(results);
 
-                    results.iter().map(|v| *v).collect::<Vec<_>>()
+                    results.iter().copied().collect::<Vec<_>>()
                 }
                 ObjectType::Uint8 => {
                     let results = sys::ngt_get_object_as_integer(self.ospace, id, self.ebuf);
@@ -341,7 +338,6 @@ impl Drop for Index {
 #[cfg(not(feature = "shared_mem"))]
 #[derive(Debug)]
 pub struct QGIndex {
-    pub(crate) path: CString,
     pub(crate) prop: Properties,
     pub(crate) index: sys::NGTQGIndex,
     ebuf: sys::NGTError,
@@ -385,7 +381,6 @@ impl QGIndex {
             let prop = Properties::from(index)?;
 
             Ok(QGIndex {
-                path,
                 prop,
                 index,
                 ebuf: sys::ngt_create_error_object(),
@@ -446,7 +441,7 @@ impl QGIndex {
                     );
                     let results = mem::ManuallyDrop::new(results);
 
-                    results.iter().map(|v| *v).collect::<Vec<_>>()
+                    results.iter().copied().collect::<Vec<_>>()
                 }
                 ObjectType::Uint8 => {
                     let ospace = sys::ngt_get_object_space(self.index, self.ebuf);
