@@ -1,8 +1,8 @@
 [package]
 name = "ngt-sys"
-version = "1.14.6"
+version = "1.14.7"
 authors = ["Romain Leroux <romain@leroux.dev>"]
-edition = "2018"
+edition = "2021"
 links = "ngt"
 description = "Native bindings to the NGT library."
 repository = "https://github.com/lerouxrgd/ngt-rs"

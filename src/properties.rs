@@ -25,7 +25,10 @@ pub enum DistanceType {
     NormalizedAngle = 5,
     NormalizedCosine = 6,
     Jaccard = 7,
-    // SparseJaccard = 8,
+    SparseJaccard = 8,
+    NormalizedL2 = 9,
+    Poincare = 100,
+    Lorentz = 101,
 }
 
 #[derive(Debug)]
@@ -278,6 +281,26 @@ impl Properties {
             }
             DistanceType::Jaccard => {
                 if !sys::ngt_set_property_distance_type_jaccard(raw_prop, ebuf) {
+                    Err(make_err(ebuf))?
+                }
+            }
+            DistanceType::SparseJaccard => {
+                if !sys::ngt_set_property_distance_type_sparse_jaccard(raw_prop, ebuf) {
+                    Err(make_err(ebuf))?
+                }
+            }
+            DistanceType::NormalizedL2 => {
+                if !sys::ngt_set_property_distance_type_normalized_l2(raw_prop, ebuf) {
+                    Err(make_err(ebuf))?
+                }
+            }
+            DistanceType::Poincare => {
+                if !sys::ngt_set_property_distance_type_poincare(raw_prop, ebuf) {
+                    Err(make_err(ebuf))?
+                }
+            }
+            DistanceType::Lorentz => {
+                if !sys::ngt_set_property_distance_type_lorentz(raw_prop, ebuf) {
                     Err(make_err(ebuf))?
                 }
             }
