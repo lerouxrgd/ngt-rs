@@ -320,6 +320,16 @@ impl Index {
             Ok(results)
         }
     }
+
+    /// The number of vectors inserted (but not necessarily indexed).
+    pub fn nb_inserted(&self) -> u32 {
+        unsafe { sys::ngt_get_number_of_objects(self.index, self.ebuf) }
+    }
+
+    /// The number of indexed vectors, available after [`build`](Index::build).
+    pub fn nb_indexed(&self) -> u32 {
+        unsafe { sys::ngt_get_number_of_indexed_objects(self.index, self.ebuf) }
+    }
 }
 
 impl Drop for Index {
@@ -592,10 +602,14 @@ mod tests {
         let vec2 = vec![4.0, 5.0, 6.0];
         let id1 = index.insert(vec1.clone())?;
         let id2 = index.insert(vec2.clone())?;
+        assert!(index.nb_inserted() == 2);
+        assert!(index.nb_indexed() == 0);
 
         // Actually build the index (not yet persisted on disk)
         // This is required in order to be able to search vectors
         index.build(2)?;
+        assert!(index.nb_inserted() == 2);
+        assert!(index.nb_indexed() == 2);
 
         // Perform a vector search (with 1 result)
         let res = index.search(&vec![1.1, 2.1, 3.1], 1, EPSILON)?;
@@ -610,7 +624,9 @@ mod tests {
         // Remove a vector and check that it is not present anymore
         index.remove(id1)?;
         let res = index.get_vec(id1);
-        assert!(matches!(res, Result::Err(_)));
+        assert!(res.is_err());
+        assert!(index.nb_inserted() == 1);
+        assert!(index.nb_indexed() == 1);
 
         // Verify that now our search result is different
         let res = index.search(&vec![1.1, 2.1, 3.1], 1, EPSILON)?;
@@ -620,10 +636,12 @@ mod tests {
         // Persist index on disk, and open it again
         index.persist()?;
         index = Index::open(dir.path())?;
+        assert!(index.nb_inserted() == 1);
+        assert!(index.nb_indexed() == 1);
 
         // Check that the removed vector wasn't persisted
         let res = index.get_vec(id1);
-        assert!(matches!(res, Result::Err(_)));
+        assert!(res.is_err());
 
         // Verify that out search result is still consistent
         let res = index.search(&vec![1.1, 2.1, 3.1], 1, EPSILON)?;

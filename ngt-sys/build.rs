@@ -18,7 +18,7 @@ fn main() {
     println!("cargo:rustc-link-lib=dylib=ngt");
 
     let bindings = bindgen::Builder::default()
-        .clang_arg(format!("-F{}/include", dst.display()))
+        .clang_arg(format!("-I{}/include", dst.display()))
         .header(format!("{}/include/NGT/NGTQ/Capi.h", dst.display()))
         .generate()
         .expect("Unable to generate bindings");
