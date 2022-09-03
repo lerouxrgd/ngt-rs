@@ -20,5 +20,6 @@ rayon = "1"
 tempfile = "3"
 
 [features]
+default = []
 shared_mem = ["ngt-sys/shared_mem"]
 large_data = ["ngt-sys/large_data"]

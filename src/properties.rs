@@ -7,14 +7,14 @@ use scopeguard::defer;
 
 use crate::error::{make_err, Result};
 
-#[derive(Debug, Clone, Copy, PartialEq, TryFromPrimitive)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, TryFromPrimitive)]
 #[repr(i32)]
 pub enum ObjectType {
     Uint8 = 1,
     Float = 2,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, TryFromPrimitive)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, TryFromPrimitive)]
 #[repr(i32)]
 pub enum DistanceType {
     L1 = 0,
