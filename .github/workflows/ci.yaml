@@ -1,0 +1,35 @@
+name: Build & Test
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build-and-test:
+    name: Build and test
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest]
+        feature:
+          - default
+          - shared_mem
+          - large_data
+          - shared_mem,large_data
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: recursive
+      - run: rustup update
+      - run: cargo build --features ${{ matrix.feature }}
+      - run: cargo fmt --check --all
+      - run: cargo clippy --features ${{ matrix.feature }} -- -D warnings
+      - run: |
+          LD_LIBRARY_PATH=$(find ./target -name "libngt.so" | tail -n1 | xargs dirname)
+          echo "LD_LIBRARY_PATH=$LD_LIBRARY_PATH" >> $GITHUB_ENV
+      - run: cargo test --features ${{ matrix.feature }} --verbose

@@ -128,6 +128,7 @@ impl Default for AnngEdgeOptimParams {
     }
 }
 
+#[cfg(not(feature = "shared_mem"))]
 impl AnngEdgeOptimParams {
     unsafe fn into_raw(self) -> sys::NGTAnngEdgeOptimizationParameter {
         let mut params = sys::ngt_get_anng_edge_optimization_parameter();
