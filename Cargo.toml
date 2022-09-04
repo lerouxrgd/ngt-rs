@@ -1,6 +1,6 @@
 [package]
 name = "ngt"
-version = "0.4.4"
+version = "0.4.5"
 authors = ["Romain Leroux <romain@leroux.dev>"]
 edition = "2021"
 description = "Rust wrappers for NGT nearest neighbor search."
@@ -21,5 +21,6 @@ tempfile = "3"
 
 [features]
 default = []
+static = ["ngt-sys/static"]
 shared_mem = ["ngt-sys/shared_mem"]
 large_data = ["ngt-sys/large_data"]
