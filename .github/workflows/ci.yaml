@@ -21,6 +21,8 @@ jobs:
           - shared_mem
           - large_data
           - shared_mem,large_data
+          - static
+          - static,shared_mem,large_data
     steps:
       - uses: actions/checkout@v3
         with:
@@ -29,7 +31,8 @@ jobs:
       - run: cargo build --features ${{ matrix.feature }}
       - run: cargo fmt --check --all
       - run: cargo clippy --features ${{ matrix.feature }} -- -D warnings
-      - run: |
+      - if: ${{ !contains(matrix.feature, 'static') }}
+        run: |
           LD_LIBRARY_PATH=$(find ./target -name "libngt.so" | tail -n1 | xargs dirname)
           echo "LD_LIBRARY_PATH=$LD_LIBRARY_PATH" >> $GITHUB_ENV
       - run: cargo test --features ${{ matrix.feature }} --verbose

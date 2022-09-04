@@ -2,7 +2,12 @@ use std::env;
 use std::path::PathBuf;
 
 fn main() {
+    let out_dir = env::var("OUT_DIR").unwrap();
+
     let mut config = cmake::Config::new("NGT");
+
+    #[cfg(feature = "static")]
+    config.define("NGT_OPENMP_DISABLED", "TRUE");
 
     if env::var("CARGO_FEATURE_SHARED_MEM").is_ok() {
         config.define("NGT_SHARED_MEMORY_ALLOCATOR", "ON");
@@ -14,7 +19,15 @@ fn main() {
 
     let dst = config.build();
 
+    #[cfg(feature = "static")]
+    cpp_build::Config::new()
+        .include(format!("{}/lib", out_dir))
+        .build("src/lib.rs");
+
     println!("cargo:rustc-link-search=native={}/lib", dst.display());
+    #[cfg(feature = "static")]
+    println!("cargo:rustc-link-lib=static=ngt");
+    #[cfg(not(feature = "static"))]
     println!("cargo:rustc-link-lib=dylib=ngt");
 
     let bindings = bindgen::Builder::default()
@@ -23,7 +36,7 @@ fn main() {
         .generate()
         .expect("Unable to generate bindings");
 
-    let out_path = PathBuf::from(env::var("OUT_DIR").unwrap());
+    let out_path = PathBuf::from(out_dir);
     bindings
         .write_to_file(out_path.join("bindings.rs"))
         .expect("Couldn't write bindings");
