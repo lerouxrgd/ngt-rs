@@ -5,13 +5,16 @@
 [Latest Doc]: https://docs.rs/ngt/badge.svg
 [docs.rs]: https://docs.rs/ngt
 
-<!-- cargo-sync-readme start -->
-
 Rust wrappers for [NGT][], which provides high-speed approximate nearest neighbor
 searches against a large volume of data.
 
-Note that NGT will be built dynamically for your target and this requires `cmake`.
-Furthermore, NGT's shared memory and large dataset features are available through cargo
+Building NGT requires `CMake`. By default `ngt-rs` will be built dynamically, which
+means that you'll need to make the build artifact `libngt.so` available to your final
+binary. You'll also need to have `OpenMP` installed on the system where it will run. If
+you want to build `ngt-rs` statically, then use the `static` Cargo feature, note that in
+this case `OpenMP` will be disabled when building NGT.
+
+Furthermore, NGT's shared memory and large dataset features are available through Cargo
 features `shared_mem` and `large_data` respectively.
 
 ## Usage
@@ -74,5 +77,3 @@ index.persist()?;
 ```
 
 [ngt]: https://github.com/yahoojapan/NGT
-
-<!-- cargo-sync-readme end -->
