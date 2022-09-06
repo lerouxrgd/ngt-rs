@@ -6,9 +6,6 @@ fn main() {
 
     let mut config = cmake::Config::new("NGT");
 
-    #[cfg(feature = "static")]
-    config.define("NGT_OPENMP_DISABLED", "TRUE");
-
     if env::var("CARGO_FEATURE_SHARED_MEM").is_ok() {
         config.define("NGT_SHARED_MEMORY_ALLOCATOR", "ON");
     }
