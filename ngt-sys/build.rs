@@ -27,6 +27,9 @@ fn main() {
     #[cfg(not(feature = "static"))]
     println!("cargo:rustc-link-lib=dylib=ngt");
 
+    #[cfg(feature = "static")]
+    println!("cargo:rustc-link-lib=gomp");
+
     let bindings = bindgen::Builder::default()
         .clang_arg(format!("-I{}/include", dst.display()))
         .header(format!("{}/include/NGT/NGTQ/Capi.h", dst.display()))

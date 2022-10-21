@@ -80,9 +80,6 @@
 //!
 //! [ngt]: https://github.com/yahoojapan/NGT
 
-// See: https://gitlab.com/kornelski/openmp-rs#1-adding-rust-dependency
-extern crate openmp_sys;
-
 mod error;
 mod index;
 pub mod optim;

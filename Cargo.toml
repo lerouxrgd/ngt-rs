@@ -13,7 +13,6 @@ readme = "README.md"
 [dependencies]
 ngt-sys = { path = "ngt-sys", version = "1.14.8-static" }
 num_enum = "0.5"
-openmp-sys = { version="1.2.3", features=["static"] }
 scopeguard = "1"
 
 [dev-dependencies]
