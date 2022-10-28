@@ -20,8 +20,11 @@ jobs:
           - default
           - shared_mem
           - large_data
-          - shared_mem,large_data
+          - quantized
+          - large_data,shared_mem
+          - large_data,quantized
           - static
+          - static,quantized
           - static,shared_mem,large_data
     steps:
       - uses: actions/checkout@v3

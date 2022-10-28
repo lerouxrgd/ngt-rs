@@ -9,14 +9,14 @@ use crate::error::{make_err, Result};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, TryFromPrimitive)]
 #[repr(i32)]
-pub enum ObjectType {
+pub enum NgtObject {
     Uint8 = 1,
     Float = 2,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, TryFromPrimitive)]
 #[repr(i32)]
-pub enum DistanceType {
+pub enum NgtDistance {
     L1 = 0,
     L2 = 1,
     Angle = 2,
@@ -32,25 +32,25 @@ pub enum DistanceType {
 }
 
 #[derive(Debug)]
-pub struct Properties {
+pub struct NgtProperties {
     pub(crate) dimension: i32,
     pub(crate) creation_edge_size: i16,
     pub(crate) search_edge_size: i16,
-    pub(crate) object_type: ObjectType,
-    pub(crate) distance_type: DistanceType,
+    pub(crate) object_type: NgtObject,
+    pub(crate) distance_type: NgtDistance,
     pub(crate) raw_prop: sys::NGTProperty,
 }
 
-unsafe impl Send for Properties {}
-unsafe impl Sync for Properties {}
+unsafe impl Send for NgtProperties {}
+unsafe impl Sync for NgtProperties {}
 
-impl Properties {
+impl NgtProperties {
     pub fn dimension(dimension: usize) -> Result<Self> {
         let dimension = i32::try_from(dimension)?;
         let creation_edge_size = 10;
         let search_edge_size = 40;
-        let object_type = ObjectType::Float;
-        let distance_type = DistanceType::L2;
+        let object_type = NgtObject::Float;
+        let distance_type = NgtDistance::L2;
 
         unsafe {
             let ebuf = sys::ngt_create_error_object();
@@ -138,13 +138,13 @@ impl Properties {
             if object_type < 0 {
                 Err(make_err(ebuf))?
             }
-            let object_type = ObjectType::try_from(object_type)?;
+            let object_type = NgtObject::try_from(object_type)?;
 
             let distance_type = sys::ngt_get_property_distance_type(raw_prop, ebuf);
             if distance_type < 0 {
                 Err(make_err(ebuf))?
             }
-            let distance_type = DistanceType::try_from(distance_type)?;
+            let distance_type = NgtDistance::try_from(distance_type)?;
 
             Ok(Self {
                 dimension,
@@ -204,23 +204,23 @@ impl Properties {
         Ok(())
     }
 
-    pub fn object_type(mut self, object_type: ObjectType) -> Result<Self> {
+    pub fn object_type(mut self, object_type: NgtObject) -> Result<Self> {
         self.object_type = object_type;
         unsafe { Self::set_object_type(self.raw_prop, object_type)? };
         Ok(self)
     }
 
-    unsafe fn set_object_type(raw_prop: sys::NGTProperty, object_type: ObjectType) -> Result<()> {
+    unsafe fn set_object_type(raw_prop: sys::NGTProperty, object_type: NgtObject) -> Result<()> {
         let ebuf = sys::ngt_create_error_object();
         defer! { sys::ngt_destroy_error_object(ebuf); }
 
         match object_type {
-            ObjectType::Uint8 => {
+            NgtObject::Uint8 => {
                 if !sys::ngt_set_property_object_type_integer(raw_prop, ebuf) {
                     Err(make_err(ebuf))?
                 }
             }
-            ObjectType::Float => {
+            NgtObject::Float => {
                 if !sys::ngt_set_property_object_type_float(raw_prop, ebuf) {
                     Err(make_err(ebuf))?
                 }
@@ -230,7 +230,7 @@ impl Properties {
         Ok(())
     }
 
-    pub fn distance_type(mut self, distance_type: DistanceType) -> Result<Self> {
+    pub fn distance_type(mut self, distance_type: NgtDistance) -> Result<Self> {
         self.distance_type = distance_type;
         unsafe { Self::set_distance_type(self.raw_prop, distance_type)? };
         Ok(self)
@@ -238,68 +238,68 @@ impl Properties {
 
     unsafe fn set_distance_type(
         raw_prop: sys::NGTProperty,
-        distance_type: DistanceType,
+        distance_type: NgtDistance,
     ) -> Result<()> {
         let ebuf = sys::ngt_create_error_object();
         defer! { sys::ngt_destroy_error_object(ebuf); }
 
         match distance_type {
-            DistanceType::L1 => {
+            NgtDistance::L1 => {
                 if !sys::ngt_set_property_distance_type_l1(raw_prop, ebuf) {
                     Err(make_err(ebuf))?
                 }
             }
-            DistanceType::L2 => {
+            NgtDistance::L2 => {
                 if !sys::ngt_set_property_distance_type_l2(raw_prop, ebuf) {
                     Err(make_err(ebuf))?
                 }
             }
-            DistanceType::Angle => {
+            NgtDistance::Angle => {
                 if !sys::ngt_set_property_distance_type_angle(raw_prop, ebuf) {
                     Err(make_err(ebuf))?
                 }
             }
-            DistanceType::Hamming => {
+            NgtDistance::Hamming => {
                 if !sys::ngt_set_property_distance_type_hamming(raw_prop, ebuf) {
                     Err(make_err(ebuf))?
                 }
             }
-            DistanceType::Cosine => {
+            NgtDistance::Cosine => {
                 if !sys::ngt_set_property_distance_type_cosine(raw_prop, ebuf) {
                     Err(make_err(ebuf))?
                 }
             }
-            DistanceType::NormalizedAngle => {
+            NgtDistance::NormalizedAngle => {
                 if !sys::ngt_set_property_distance_type_normalized_angle(raw_prop, ebuf) {
                     Err(make_err(ebuf))?
                 }
             }
-            DistanceType::NormalizedCosine => {
+            NgtDistance::NormalizedCosine => {
                 if !sys::ngt_set_property_distance_type_normalized_cosine(raw_prop, ebuf) {
                     Err(make_err(ebuf))?
                 }
             }
-            DistanceType::Jaccard => {
+            NgtDistance::Jaccard => {
                 if !sys::ngt_set_property_distance_type_jaccard(raw_prop, ebuf) {
                     Err(make_err(ebuf))?
                 }
             }
-            DistanceType::SparseJaccard => {
+            NgtDistance::SparseJaccard => {
                 if !sys::ngt_set_property_distance_type_sparse_jaccard(raw_prop, ebuf) {
                     Err(make_err(ebuf))?
                 }
             }
-            DistanceType::NormalizedL2 => {
+            NgtDistance::NormalizedL2 => {
                 if !sys::ngt_set_property_distance_type_normalized_l2(raw_prop, ebuf) {
                     Err(make_err(ebuf))?
                 }
             }
-            DistanceType::Poincare => {
+            NgtDistance::Poincare => {
                 if !sys::ngt_set_property_distance_type_poincare(raw_prop, ebuf) {
                     Err(make_err(ebuf))?
                 }
             }
-            DistanceType::Lorentz => {
+            NgtDistance::Lorentz => {
                 if !sys::ngt_set_property_distance_type_lorentz(raw_prop, ebuf) {
                     Err(make_err(ebuf))?
                 }
@@ -310,7 +310,7 @@ impl Properties {
     }
 }
 
-impl Drop for Properties {
+impl Drop for NgtProperties {
     fn drop(&mut self) {
         if !self.raw_prop.is_null() {
             unsafe { sys::ngt_destroy_property(self.raw_prop) };
