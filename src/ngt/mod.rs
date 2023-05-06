@@ -65,7 +65,7 @@
 //! ```
 
 mod index;
-// mod optim;
+pub mod optim;
 mod properties;
 
 pub use self::index::NgtIndex;

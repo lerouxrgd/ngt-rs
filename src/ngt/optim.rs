@@ -7,18 +7,18 @@ use ngt_sys as sys;
 use scopeguard::defer;
 
 use crate::error::{make_err, Result};
-use crate::index::Index;
+use crate::ngt::index::NgtIndex;
 
 /// Optimizes the number of initial edges of an ANNG index.
 ///
 /// The default number of initial edges for each node in a default graph (ANNG) is a
 /// fixed value 10. To optimize this number, follow these steps:
-///   1. [`insert`](Index::insert) vectors in the ANNG index at `index_path`, don't
-///   [`build`](Index::build) the index yet.
-///   2. When all vectors are inserted, [`persist`](Index::persist) the index.
+///   1. [`insert`](NgtIndex::insert) vectors in the ANNG index at `index_path`, don't
+///   [`build`](NgtIndex::build) the index yet.
+///   2. When all vectors are inserted, [`persist`](NgtIndex::persist) the index.
 ///   3. Call this function with the same `index_path`.
-///   4. [`open`](Index::open) the index at `index_path` again, and now
-///   [`build`](Index::build) it.
+///   4. [`open`](NgtIndex::open) the index at `index_path` again, and now
+///   [`build`](NgtIndex::build) it.
 #[cfg(not(feature = "shared_mem"))]
 pub fn optimize_anng_edges_number<P: AsRef<Path>>(
     index_path: P,
@@ -53,9 +53,9 @@ pub fn optimize_anng_search_parameters<P: AsRef<Path>>(index_path: P) -> Result<
 ///
 /// Improves accuracy of neighboring nodes for each node by searching with each
 /// node. Note that refinement takes a long processing time. An ANNG index can be
-/// refined only after it has been [`built`](Index::build).
+/// refined only after it has been [`built`](NgtIndex::build).
 #[cfg(not(feature = "shared_mem"))]
-pub fn refine_anng(index: &mut Index, params: AnngRefineParams) -> Result<()> {
+pub fn refine_anng(index: &mut NgtIndex, params: AnngRefineParams) -> Result<()> {
     unsafe {
         let ebuf = sys::ngt_create_error_object();
         defer! { sys::ngt_destroy_error_object(ebuf); }
@@ -85,7 +85,7 @@ pub fn refine_anng(index: &mut Index, params: AnngRefineParams) -> Result<()> {
 ///
 /// If more performance is needed, a larger `creation_edge_size` can be set through
 /// [`Properties`](crate::Properties::creation_edge_size) at ANNG index
-/// [`create`](Index::create) time.
+/// [`create`](NgtIndex::create) time.
 ///
 /// Important [`GraphOptimParams`](GraphOptimParams) parameters are `nb_outgoing` edges
 /// and `nb_incoming` edges. The latter can be set to an even higher number than the
@@ -254,7 +254,7 @@ impl GraphOptimizer {
 
     /// Optimize for the search parameters of an ANNG.
     fn adjust_search_coefficients<P: AsRef<Path>>(&mut self, index_path: P) -> Result<()> {
-        let _ = Index::open(&index_path)?;
+        let _ = NgtIndex::open(&index_path)?;
 
         unsafe {
             let ebuf = sys::ngt_create_error_object();
@@ -276,7 +276,7 @@ impl GraphOptimizer {
         index_anng_in: P,
         index_onng_out: P,
     ) -> Result<()> {
-        let _ = Index::open(&index_anng_in)?;
+        let _ = NgtIndex::open(&index_anng_in)?;
 
         unsafe {
             let ebuf = sys::ngt_create_error_object();
@@ -310,9 +310,7 @@ mod tests {
 
     use tempfile::tempdir;
 
-    use crate::{DistanceType, Index, Properties};
-
-    use super::*;
+    use crate::{ngt::optim::*, ngt::*};
 
     #[ignore]
     #[test]
@@ -322,12 +320,12 @@ mod tests {
         let dir = tempdir()?;
 
         // Create an index for vectors of dimension 3 with cosine distance
-        let prop = Properties::dimension(3)?.distance_type(DistanceType::Cosine)?;
-        let mut index = Index::create(dir.path(), prop)?;
+        let prop = NgtProperties::dimension(3)?.distance_type(NgtDistance::Cosine)?;
+        let mut index = NgtIndex::create(dir.path(), prop)?;
 
         // Populate the index, but don't build it yet
         for i in 0..1_000_000 {
-            let _ = index.insert(vec![i, i + 1, i + 2])?;
+            let _ = index.insert(vec![i as f32, i as f32 + 1.0, i as f32 + 2.0])?;
         }
         index.persist()?;
 
@@ -335,7 +333,7 @@ mod tests {
         optimize_anng_edges_number(dir.path(), AnngEdgeOptimParams::default())?;
 
         // Now build and persist again the optimized index
-        let mut index = Index::open(dir.path())?;
+        let mut index = NgtIndex::open(dir.path())?;
         index.build(4)?;
         index.persist()?;
 
@@ -353,12 +351,12 @@ mod tests {
         let dir = tempdir()?;
 
         // Create an index for vectors of dimension 3 with cosine distance
-        let prop = Properties::dimension(3)?.distance_type(DistanceType::Cosine)?;
-        let mut index = Index::create(dir.path(), prop)?;
+        let prop = NgtProperties::dimension(3)?.distance_type(NgtDistance::Cosine)?;
+        let mut index = NgtIndex::create(dir.path(), prop)?;
 
         // Populate and build the index
         for i in 0..1000 {
-            let _ = index.insert(vec![i, i + 1, i + 2])?;
+            let _ = index.insert(vec![i as f32, i as f32 + 1.0, i as f32 + 2.0])?;
         }
         index.build(4)?;
 
@@ -377,15 +375,15 @@ mod tests {
         let dir_in = tempdir()?;
 
         // Create an index for vectors of dimension 3 with cosine distance
-        let prop = Properties::dimension(3)?
-            .distance_type(DistanceType::Cosine)?
+        let prop = NgtProperties::dimension(3)?
+            .distance_type(NgtDistance::Cosine)?
             .creation_edge_size(100)?; // More than default value, improves the final ONNG
 
-        let mut index = Index::create(dir_in.path(), prop)?;
+        let mut index = NgtIndex::create(dir_in.path(), prop)?;
 
         // Populate and persist (but don't build yet) the index
         for i in 0..1000 {
-            let _ = index.insert(vec![i, i + 1, i + 2])?;
+            let _ = index.insert(vec![i as f32, i as f32 + 1.0, i as f32 + 2.0])?;
         }
         index.persist()?;
 
@@ -393,7 +391,7 @@ mod tests {
         optimize_anng_edges_number(dir_in.path(), AnngEdgeOptimParams::default())?;
 
         // Now build and persist again the optimized index
-        let mut index = Index::open(dir_in.path())?;
+        let mut index = NgtIndex::open(dir_in.path())?;
         index.build(4)?;
         index.persist()?;
 
