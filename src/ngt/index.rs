@@ -105,7 +105,7 @@ impl NgtIndex {
     /// Search the nearest vectors to the specified query vector.
     ///
     /// **The index must have been [`built`](NgtIndex::build) beforehand**.
-    pub fn search(&self, vec: &[f64], res_size: u64, epsilon: f32) -> Result<Vec<SearchResult>> {
+    pub fn search(&self, vec: &[f32], res_size: u64, epsilon: f32) -> Result<Vec<SearchResult>> {
         unsafe {
             let results = sys::ngt_create_empty_results(self.ebuf);
             if results.is_null() {
@@ -113,9 +113,9 @@ impl NgtIndex {
             }
             defer! { sys::ngt_destroy_results(results); }
 
-            if !sys::ngt_search_index(
+            if !sys::ngt_search_index_as_float(
                 self.index,
-                vec.as_ptr() as *mut f64,
+                vec.as_ptr() as *mut f32,
                 self.prop.dimension,
                 res_size,
                 epsilon,
@@ -148,7 +148,7 @@ impl NgtIndex {
     /// Search linearly the nearest vectors to the specified query vector.
     ///
     /// **The index must have been [`built`](NgtIndex::build) beforehand**.
-    pub fn linear_search(&self, vec: &[f64], res_size: u64) -> Result<Vec<SearchResult>> {
+    pub fn linear_search(&self, vec: &[f32], res_size: u64) -> Result<Vec<SearchResult>> {
         unsafe {
             let results = sys::ngt_create_empty_results(self.ebuf);
             if results.is_null() {
@@ -156,9 +156,9 @@ impl NgtIndex {
             }
             defer! { sys::ngt_destroy_results(results); }
 
-            if !sys::ngt_linear_search_index(
+            if !sys::ngt_linear_search_index_as_float(
                 self.index,
-                vec.as_ptr() as *mut f64,
+                vec.as_ptr() as *mut f32,
                 self.prop.dimension,
                 res_size,
                 results,
@@ -210,7 +210,7 @@ impl NgtIndex {
     /// discoverable yet.
     ///
     /// **The method [`build`](NgtIndex::build) must be called after inserting vectors**.
-    pub fn insert_batch<F: Into<f64>>(&mut self, batch: Vec<Vec<F>>) -> Result<()> {
+    pub fn insert_batch(&mut self, batch: Vec<Vec<f32>>) -> Result<()> {
         let batch_size = u32::try_from(batch.len())?;
 
         if batch_size > 0 {
@@ -226,16 +226,10 @@ impl NgtIndex {
         }
 
         unsafe {
-            let mut batch = batch
-                .into_iter()
-                .flatten()
-                .map(|v| v.into() as f32)
-                .collect::<Vec<f32>>();
-
+            let mut batch = batch.into_iter().flatten().collect::<Vec<f32>>();
             if !sys::ngt_batch_append_index(self.index, batch.as_mut_ptr(), batch_size, self.ebuf) {
                 Err(make_err(self.ebuf))?
             }
-
             Ok(())
         }
     }

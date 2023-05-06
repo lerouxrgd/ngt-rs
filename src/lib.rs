@@ -38,5 +38,5 @@ pub const EPSILON: f32 = 0.1;
 pub use crate::error::{Error, Result};
 pub use crate::ngt::{NgtDistance, NgtIndex, NgtObject, NgtProperties};
 
-// TODO: search etc only f32, drop support for f64/Into<f64>
 // TODO: what about float16 ?
+// TODO: add doc (link to official blog posts)
