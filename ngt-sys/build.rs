@@ -31,8 +31,11 @@ fn main() {
             .build("src/lib.rs");
         println!("cargo:rustc-link-lib=static=ngt");
         println!("cargo:rustc-link-lib=gomp");
-        println!("cargo:rustc-link-lib=blas");
-        println!("cargo:rustc-link-lib=lapack");
+
+        if env::var("CARGO_FEATURE_QUANTIZED").is_ok() {
+            println!("cargo:rustc-link-lib=blas");
+            println!("cargo:rustc-link-lib=lapack");
+        }
     }
 
     let capi_header = if cfg!(feature = "quantized") {

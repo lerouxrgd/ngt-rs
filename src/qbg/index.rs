@@ -7,9 +7,10 @@ use ngt_sys as sys;
 use num_enum::TryFromPrimitive;
 use scopeguard::defer;
 
-use super::{QbgDistance, QbgObject};
 use crate::error::{make_err, Error, Result};
 use crate::{SearchResult, VecId};
+
+use super::{QbgDistance, QbgObject};
 
 #[derive(Debug)]
 pub struct QbgIndex<T> {

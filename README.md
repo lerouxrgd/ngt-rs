@@ -6,46 +6,61 @@
 [docs.rs]: https://docs.rs/ngt
 
 Rust wrappers for [NGT][], which provides high-speed approximate nearest neighbor
-searches against a large volume of data.
+searches against a large volume of data in high dimensional vector data space (several
+ten to several thousand dimensions).
 
-Building NGT requires `CMake`. By default `ngt-rs` will be built dynamically, which
-means that you'll need to make the build artifact `libngt.so` available to your final
-binary. You'll also need to have `OpenMP` installed on the system where it will run. If
-you want to build `ngt-rs` statically, then use the `static` Cargo feature, note that in
-this case `OpenMP` will be linked statically too.
+This crate provides the following indexes:
+* `NgtIndex`: Graph and tree-based index[^1]
+* `QqIndex`: Quantized graph-based index[^2]
+* `QbgIndex`: Quantized blob graph-based index
 
-Furthermore, NGT's shared memory and large dataset features are available through Cargo
-features `shared_mem` and `large_data` respectively.
+The quantized indexes are available through the `quantized` Cargo feature. Note that
+they rely on `BLAS` and `LAPACK` which thus have to be installed locally. The CPU
+running the code must also support `AVX2` instructions.
+
+The `NgtIndex` default implementation is an ANNG, it can be optimized[^3] or converted
+to an ONNG through the [`optim`][ngt-optim] module.
+
+By default `ngt-rs` will be built dynamically, which requires `CMake` to build NGT. This
+means that you'll have to make the build artifact `libngt.so` available to your final
+binary (see an example in the [CI][ngt-ci]).
+
+However the `static` feature will build and link NGT statically. Note that `OpenMP` will
+also be linked statically. If the `quantized` feature is used, then `BLAS` and `LAPACK`
+libraries will also be linked statically.
+
+Finally, NGT's [shared memory][ngt-sharedmem] and [large dataset][ngt-largedata]
+features are available through the features `shared_mem` and `large_data` respectively.
 
 ## Usage
 
 Defining the properties of a new index:
 
-```rust
-use ngt::{Properties, DistanceType, ObjectType};
+```rust,ignore
+use ngt::{NgtProperties, NgtDistance, NgtObject};
 
 // Defaut properties with vectors of dimension 3
-let prop = Properties::dimension(3)?;
+let prop = NgtProperties::dimension(3)?;
 
 // Or customize values (here are the defaults)
-let prop = Properties::dimension(3)?
+let prop = NgtProperties::dimension(3)?
     .creation_edge_size(10)?
     .search_edge_size(40)?
-    .object_type(ObjectType::Float)?
-    .distance_type(DistanceType::L2)?;
+    .object_type(NgtObject::Float)?
+    .distance_type(NgtDistance::L2)?;
 ```
 
 Creating/Opening an index and using it:
 
-```rust
-use ngt::{Index, Properties, EPSILON};
+```rust,ignore
+use ngt::{NgtIndex, NgtProperties, EPSILON};
 
 // Create a new index
-let prop = Properties::dimension(3)?;
-let index = Index::create("target/path/to/index/dir", prop)?;
+let prop = NgtProperties::dimension(3)?;
+let index = NgtIndex::create("target/path/to/index/dir", prop)?;
 
 // Open an existing index
-let mut index = Index::open("target/path/to/index/dir")?;
+let mut index = NgtIndex::open("target/path/to/index/dir")?;
 
 // Insert two vectors and get their id
 let vec1 = vec![1.0, 2.0, 3.0];
@@ -77,3 +92,11 @@ index.persist()?;
 ```
 
 [ngt]: https://github.com/yahoojapan/NGT
+[ngt-sharedmem]: https://github.com/yahoojapan/NGT#shared-memory-use
+[ngt-largedata]: https://github.com/yahoojapan/NGT#large-scale-data-use
+[ngt-ci]: https://github.com/lerouxrgd/ngt-rs/blob/master/.github/workflows/ci.yaml
+[ngt-optim]: https://docs.rs/ngt/latest/ngt/optim/index.html
+
+[^1]: https://opensource.com/article/19/10/ngt-open-source-library
+[^2]: https://medium.com/@masajiro.iwasaki/fusion-of-graph-based-indexing-and-product-quantization-for-ann-search-7d1f0336d0d0
+[^3]: https://github.com/yahoojapan/NGT/wiki/Optimization-Examples-Using-Python

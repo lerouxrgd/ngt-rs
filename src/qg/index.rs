@@ -20,7 +20,8 @@ pub struct QgIndex {
 }
 
 impl QgIndex {
-    pub fn quantize(index: NgtIndex, params: QgParams) -> Result<Self> {
+    /// Quantize an NGT index
+    pub fn quantize(index: NgtIndex, params: QgQuantizationParams) -> Result<Self> {
         if !is_x86_feature_detected!("avx2") {
             return Err(Error(
                 "Cannot quantize an index without AVX2 support".into(),
@@ -170,12 +171,12 @@ impl Drop for QgIndex {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct QgParams {
+pub struct QgQuantizationParams {
     pub dimension_of_subvector: f32,
     pub max_number_of_edges: u64,
 }
 
-impl Default for QgParams {
+impl Default for QgQuantizationParams {
     fn default() -> Self {
         Self {
             dimension_of_subvector: 0.0,
@@ -184,7 +185,7 @@ impl Default for QgParams {
     }
 }
 
-impl QgParams {
+impl QgQuantizationParams {
     unsafe fn into_raw(self) -> sys::NGTQGQuantizationParameters {
         sys::NGTQGQuantizationParameters {
             dimension_of_subvector: self.dimension_of_subvector,
@@ -286,7 +287,7 @@ mod tests {
         index.persist()?;
 
         // Quantize the index
-        let params = QgParams {
+        let params = QgQuantizationParams {
             dimension_of_subvector: 1.,
             max_number_of_edges: 50,
         };

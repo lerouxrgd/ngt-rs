@@ -325,7 +325,8 @@ mod tests {
 
         // Populate the index, but don't build it yet
         for i in 0..1_000_000 {
-            let _ = index.insert(vec![i as f32, i as f32 + 1.0, i as f32 + 2.0])?;
+            let i = i as f32;
+            let _ = index.insert(vec![i, i + 1.0, i + 2.0])?;
         }
         index.persist()?;
 
@@ -356,7 +357,8 @@ mod tests {
 
         // Populate and build the index
         for i in 0..1000 {
-            let _ = index.insert(vec![i as f32, i as f32 + 1.0, i as f32 + 2.0])?;
+            let i = i as f32;
+            let _ = index.insert(vec![i, i + 1.0, i + 2.0])?;
         }
         index.build(4)?;
 
@@ -383,7 +385,8 @@ mod tests {
 
         // Populate and persist (but don't build yet) the index
         for i in 0..1000 {
-            let _ = index.insert(vec![i as f32, i as f32 + 1.0, i as f32 + 2.0])?;
+            let i = i as f32;
+            let _ = index.insert(vec![i, i + 1.0, i + 2.0])?;
         }
         index.persist()?;
 
