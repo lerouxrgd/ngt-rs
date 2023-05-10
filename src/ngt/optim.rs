@@ -308,6 +308,7 @@ mod tests {
     use std::error::Error as StdError;
     use std::result::Result as StdResult;
 
+    use rand::Rng;
     use tempfile::tempdir;
 
     use crate::{ngt::optim::*, ngt::*};
@@ -324,9 +325,9 @@ mod tests {
         let mut index = NgtIndex::create(dir.path(), prop)?;
 
         // Populate the index, but don't build it yet
-        for i in 0..1_000_000 {
-            let i = i as f32;
-            let _ = index.insert(vec![i, i + 1.0, i + 2.0])?;
+        let mut rng = rand::thread_rng();
+        for _ in 0..25_000 {
+            index.insert(vec![rng.gen(); 3])?;
         }
         index.persist()?;
 
@@ -356,9 +357,9 @@ mod tests {
         let mut index = NgtIndex::create(dir.path(), prop)?;
 
         // Populate and build the index
-        for i in 0..1000 {
-            let i = i as f32;
-            let _ = index.insert(vec![i, i + 1.0, i + 2.0])?;
+        let mut rng = rand::thread_rng();
+        for _ in 0..1000 {
+            index.insert(vec![rng.gen(); 3])?;
         }
         index.build(4)?;
 
@@ -384,9 +385,9 @@ mod tests {
         let mut index = NgtIndex::create(dir_in.path(), prop)?;
 
         // Populate and persist (but don't build yet) the index
-        for i in 0..1000 {
-            let i = i as f32;
-            let _ = index.insert(vec![i, i + 1.0, i + 2.0])?;
+        let mut rng = rand::thread_rng();
+        for _ in 0..25_000 {
+            index.insert(vec![rng.gen(); 3])?;
         }
         index.persist()?;
 
