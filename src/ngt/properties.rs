@@ -12,6 +12,7 @@ use crate::error::{make_err, Result};
 pub enum NgtObject {
     Uint8 = 1,
     Float = 2,
+    Float16 = 3,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, TryFromPrimitive)]
@@ -222,6 +223,11 @@ impl NgtProperties {
             }
             NgtObject::Float => {
                 if !sys::ngt_set_property_object_type_float(raw_prop, ebuf) {
+                    Err(make_err(ebuf))?
+                }
+            }
+            NgtObject::Float16 => {
+                if !sys::ngt_set_property_object_type_float16(raw_prop, ebuf) {
                     Err(make_err(ebuf))?
                 }
             }

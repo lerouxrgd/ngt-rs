@@ -283,6 +283,21 @@ impl NgtIndex {
 
                     results.iter().copied().collect::<Vec<_>>()
                 }
+                NgtObject::Float16 => {
+                    let results = sys::ngt_get_object(self.ospace, id, self.ebuf);
+                    if results.is_null() {
+                        Err(make_err(self.ebuf))?
+                    }
+
+                    let results = Vec::from_raw_parts(
+                        results as *mut half::f16,
+                        self.prop.dimension as usize,
+                        self.prop.dimension as usize,
+                    );
+                    let results = mem::ManuallyDrop::new(results);
+
+                    results.iter().map(|f16| f16.to_f32()).collect::<Vec<_>>()
+                }
                 NgtObject::Uint8 => {
                     let results = sys::ngt_get_object_as_integer(self.ospace, id, self.ebuf);
                     if results.is_null() {
@@ -296,7 +311,7 @@ impl NgtIndex {
                     );
                     let results = mem::ManuallyDrop::new(results);
 
-                    results.iter().map(|byte| *byte as f32).collect::<Vec<_>>()
+                    results.iter().map(|&byte| byte as f32).collect::<Vec<_>>()
                 }
             };
 
@@ -417,6 +432,56 @@ mod tests {
 
         // Create an index for vectors of dimension 3
         let prop = NgtProperties::dimension(3)?;
+        let mut index = NgtIndex::create(dir.path(), prop)?;
+
+        // Batch insert 2 vectors, build and persist the index
+        index.insert_batch(vec![vec![1.0, 2.0, 3.0], vec![4.0, 5.0, 6.0]])?;
+        index.build(2)?;
+        index.persist()?;
+
+        // Verify that the index was built correctly with a vector search
+        let res = index.search(&vec![1.1, 2.1, 3.1], 1, EPSILON)?;
+        assert_eq!(1, res[0].id);
+
+        dir.close()?;
+        Ok(())
+    }
+
+    #[test]
+    fn test_u8() -> StdResult<(), Box<dyn StdError>> {
+        // Get a temporary directory to store the index
+        let dir = tempdir()?;
+        if cfg!(feature = "shared_mem") {
+            std::fs::remove_dir(dir.path())?;
+        }
+
+        // Create an index for vectors of dimension 3
+        let prop = NgtProperties::dimension(3)?.object_type(NgtObject::Uint8)?;
+        let mut index = NgtIndex::create(dir.path(), prop)?;
+
+        // Batch insert 2 vectors, build and persist the index
+        index.insert_batch(vec![vec![1.0, 2.0, 3.0], vec![4.0, 5.0, 6.0]])?;
+        index.build(2)?;
+        index.persist()?;
+
+        // Verify that the index was built correctly with a vector search
+        let res = index.search(&vec![1.1, 2.1, 3.1], 1, EPSILON)?;
+        assert_eq!(1, res[0].id);
+
+        dir.close()?;
+        Ok(())
+    }
+
+    #[test]
+    fn test_f16() -> StdResult<(), Box<dyn StdError>> {
+        // Get a temporary directory to store the index
+        let dir = tempdir()?;
+        if cfg!(feature = "shared_mem") {
+            std::fs::remove_dir(dir.path())?;
+        }
+
+        // Create an index for vectors of dimension 3
+        let prop = NgtProperties::dimension(3)?.object_type(NgtObject::Float16)?;
         let mut index = NgtIndex::create(dir.path(), prop)?;
 
         // Batch insert 2 vectors, build and persist the index
