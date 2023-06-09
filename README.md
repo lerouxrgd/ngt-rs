@@ -11,7 +11,7 @@ ten to several thousand dimensions).
 
 This crate provides the following indexes:
 * `NgtIndex`: Graph and tree-based index[^1]
-* `QqIndex`: Quantized graph-based index[^2]
+* `QgIndex`: Quantized graph-based index[^2]
 * `QbgIndex`: Quantized blob graph-based index
 
 The quantized indexes are available through the `quantized` Cargo feature. Note that
@@ -37,16 +37,15 @@ features are available through the features `shared_mem` and `large_data` respec
 Defining the properties of a new index:
 
 ```rust,ignore
-use ngt::{NgtProperties, NgtDistance, NgtObject};
+use ngt::{NgtProperties, NgtDistance};
 
 // Defaut properties with vectors of dimension 3
-let prop = NgtProperties::dimension(3)?;
+let prop = NgtProperties::<f32>::dimension(3)?;
 
 // Or customize values (here are the defaults)
-let prop = NgtProperties::dimension(3)?
+let prop = NgtProperties::<f32>::dimension(3)?
     .creation_edge_size(10)?
     .search_edge_size(40)?
-    .object_type(NgtObject::Float)?
     .distance_type(NgtDistance::L2)?;
 ```
 
@@ -57,7 +56,7 @@ use ngt::{NgtIndex, NgtProperties, EPSILON};
 
 // Create a new index
 let prop = NgtProperties::dimension(3)?;
-let index = NgtIndex::create("target/path/to/index/dir", prop)?;
+let index: NgtIndex<f32> = NgtIndex::create("target/path/to/index/dir", prop)?;
 
 // Open an existing index
 let mut index = NgtIndex::open("target/path/to/index/dir")?;
@@ -68,7 +67,7 @@ let vec2 = vec![4.0, 5.0, 6.0];
 let id1 = index.insert(vec1)?;
 let id2 = index.insert(vec2)?;
 
-// Actually build the index (not yet persisted on disk)
+// Build the index in RAM (not yet persisted on disk)
 // This is required in order to be able to search vectors
 index.build(2)?;
 
@@ -80,7 +79,7 @@ assert_eq!(index.get_vec(id1)?, vec![1.0, 2.0, 3.0]);
 // Remove a vector and check that it is not present anymore
 index.remove(id1)?;
 let res = index.get_vec(id1);
-assert!(matches!(res, Result::Err(_)));
+assert!(res.is_err());
 
 // Verify that now our search result is different
 let res = index.search(&vec![1.1, 2.1, 3.1], 1, EPSILON)?;

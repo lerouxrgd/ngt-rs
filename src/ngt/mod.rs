@@ -2,16 +2,15 @@
 //!
 //! ```rust
 //! # fn main() -> Result<(), ngt::Error> {
-//! use ngt::{NgtProperties, NgtDistance, NgtObject};
+//! use ngt::{NgtProperties, NgtDistance};
 //!
 //! // Defaut properties with vectors of dimension 3
-//! let prop = NgtProperties::dimension(3)?;
+//! let prop = NgtProperties::<f32>::dimension(3)?;
 //!
 //! // Or customize values (here are the defaults)
-//! let prop = NgtProperties::dimension(3)?
+//! let prop = NgtProperties::<f32>::dimension(3)?
 //!     .creation_edge_size(10)?
 //!     .search_edge_size(40)?
-//!     .object_type(NgtObject::Float)?
 //!     .distance_type(NgtDistance::L2)?;
 //!
 //! # Ok(())
@@ -26,7 +25,7 @@
 //!
 //! // Create a new index
 //! let prop = NgtProperties::dimension(3)?;
-//! let index = NgtIndex::create("target/path/to/index/dir", prop)?;
+//! let index: NgtIndex<f32> = NgtIndex::create("target/path/to/index/dir", prop)?;
 //!
 //! // Open an existing index
 //! let mut index = NgtIndex::open("target/path/to/index/dir")?;
@@ -37,7 +36,7 @@
 //! let id1 = index.insert(vec1)?;
 //! let id2 = index.insert(vec2)?;
 //!
-//! // Actually build the index (not yet persisted on disk)
+//! // Build the index in RAM (not yet persisted on disk)
 //! // This is required in order to be able to search vectors
 //! index.build(2)?;
 //!
@@ -49,7 +48,7 @@
 //! // Remove a vector and check that it is not present anymore
 //! index.remove(id1)?;
 //! let res = index.get_vec(id1);
-//! assert!(matches!(res, Result::Err(_)));
+//! assert!(res.is_err());
 //!
 //! // Verify that now our search result is different
 //! let res = index.search(&vec![1.1, 2.1, 3.1], 1, EPSILON)?;
@@ -69,4 +68,4 @@ pub mod optim;
 mod properties;
 
 pub use self::index::NgtIndex;
-pub use self::properties::{NgtDistance, NgtObject, NgtProperties};
+pub use self::properties::{NgtDistance, NgtObject, NgtObjectType, NgtProperties};

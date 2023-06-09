@@ -1,3 +1,4 @@
+use std::marker::PhantomData;
 use std::ptr;
 
 use ngt_sys as sys;
@@ -13,6 +14,28 @@ pub enum QgObject {
     Float = 2,
 }
 
+mod private {
+    pub trait Sealed {}
+}
+
+pub trait QgObjectType: private::Sealed {
+    fn as_obj() -> QgObject;
+}
+
+impl private::Sealed for f32 {}
+impl QgObjectType for f32 {
+    fn as_obj() -> QgObject {
+        QgObject::Float
+    }
+}
+
+impl private::Sealed for u8 {}
+impl QgObjectType for u8 {
+    fn as_obj() -> QgObject {
+        QgObject::Uint8
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, TryFromPrimitive)]
 #[repr(i32)]
 pub enum QgDistance {
@@ -21,24 +44,28 @@ pub enum QgDistance {
 }
 
 #[derive(Debug)]
-pub struct QgProperties {
+pub struct QgProperties<T> {
     pub(crate) dimension: i32,
     pub(crate) creation_edge_size: i16,
     pub(crate) search_edge_size: i16,
     pub(crate) object_type: QgObject,
     pub(crate) distance_type: QgDistance,
     pub(crate) raw_prop: sys::NGTProperty,
+    _marker: PhantomData<T>,
 }
 
-unsafe impl Send for QgProperties {}
-unsafe impl Sync for QgProperties {}
+unsafe impl<T> Send for QgProperties<T> {}
+unsafe impl<T> Sync for QgProperties<T> {}
 
-impl QgProperties {
+impl<T> QgProperties<T>
+where
+    T: QgObjectType,
+{
     pub fn dimension(dimension: usize) -> Result<Self> {
         let dimension = i32::try_from(dimension)?;
         let creation_edge_size = 10;
         let search_edge_size = 40;
-        let object_type = QgObject::Float;
+        let object_type = T::as_obj();
         let distance_type = QgDistance::L2;
 
         unsafe {
@@ -63,6 +90,7 @@ impl QgProperties {
                 object_type,
                 distance_type,
                 raw_prop,
+                _marker: PhantomData,
             })
         }
     }
@@ -90,6 +118,7 @@ impl QgProperties {
                 object_type: self.object_type,
                 distance_type: self.distance_type,
                 raw_prop,
+                _marker: PhantomData,
             })
         }
     }
@@ -142,6 +171,7 @@ impl QgProperties {
                 object_type,
                 distance_type,
                 raw_prop,
+                _marker: PhantomData,
             })
         }
     }
@@ -249,11 +279,35 @@ impl QgProperties {
     }
 }
 
-impl Drop for QgProperties {
+impl<T> Drop for QgProperties<T> {
     fn drop(&mut self) {
         if !self.raw_prop.is_null() {
             unsafe { sys::ngt_destroy_property(self.raw_prop) };
             self.raw_prop = ptr::null_mut();
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct QgQuantizationParams {
+    pub dimension_of_subvector: f32,
+    pub max_number_of_edges: u64,
+}
+
+impl Default for QgQuantizationParams {
+    fn default() -> Self {
+        Self {
+            dimension_of_subvector: 0.0,
+            max_number_of_edges: 128,
+        }
+    }
+}
+
+impl QgQuantizationParams {
+    pub(crate) fn into_raw(self) -> sys::NGTQGQuantizationParameters {
+        sys::NGTQGQuantizationParameters {
+            dimension_of_subvector: self.dimension_of_subvector,
+            max_number_of_edges: self.max_number_of_edges,
         }
     }
 }

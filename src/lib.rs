@@ -22,3 +22,6 @@ pub const EPSILON: f32 = 0.1;
 
 pub use crate::error::{Error, Result};
 pub use crate::ngt::{optim, NgtDistance, NgtIndex, NgtObject, NgtProperties};
+
+#[doc(inline)]
+pub use half;

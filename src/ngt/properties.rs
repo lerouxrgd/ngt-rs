@@ -1,6 +1,7 @@
-use std::convert::TryFrom;
 use std::ptr;
+use std::{convert::TryFrom, marker::PhantomData};
 
+use half::f16;
 use ngt_sys as sys;
 use num_enum::TryFromPrimitive;
 use scopeguard::defer;
@@ -13,6 +14,35 @@ pub enum NgtObject {
     Uint8 = 1,
     Float = 2,
     Float16 = 3,
+}
+
+mod private {
+    pub trait Sealed {}
+}
+
+pub trait NgtObjectType: private::Sealed {
+    fn as_obj() -> NgtObject;
+}
+
+impl private::Sealed for f32 {}
+impl NgtObjectType for f32 {
+    fn as_obj() -> NgtObject {
+        NgtObject::Float
+    }
+}
+
+impl private::Sealed for u8 {}
+impl NgtObjectType for u8 {
+    fn as_obj() -> NgtObject {
+        NgtObject::Uint8
+    }
+}
+
+impl private::Sealed for f16 {}
+impl NgtObjectType for f16 {
+    fn as_obj() -> NgtObject {
+        NgtObject::Float16
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, TryFromPrimitive)]
@@ -33,24 +63,28 @@ pub enum NgtDistance {
 }
 
 #[derive(Debug)]
-pub struct NgtProperties {
+pub struct NgtProperties<T> {
     pub(crate) dimension: i32,
     pub(crate) creation_edge_size: i16,
     pub(crate) search_edge_size: i16,
     pub(crate) object_type: NgtObject,
     pub(crate) distance_type: NgtDistance,
     pub(crate) raw_prop: sys::NGTProperty,
+    _marker: PhantomData<T>,
 }
 
-unsafe impl Send for NgtProperties {}
-unsafe impl Sync for NgtProperties {}
+unsafe impl<T> Send for NgtProperties<T> {}
+unsafe impl<T> Sync for NgtProperties<T> {}
 
-impl NgtProperties {
+impl<T> NgtProperties<T>
+where
+    T: NgtObjectType,
+{
     pub fn dimension(dimension: usize) -> Result<Self> {
         let dimension = i32::try_from(dimension)?;
         let creation_edge_size = 10;
         let search_edge_size = 40;
-        let object_type = NgtObject::Float;
+        let object_type = T::as_obj();
         let distance_type = NgtDistance::L2;
 
         unsafe {
@@ -75,6 +109,7 @@ impl NgtProperties {
                 object_type,
                 distance_type,
                 raw_prop,
+                _marker: PhantomData,
             })
         }
     }
@@ -102,6 +137,7 @@ impl NgtProperties {
                 object_type: self.object_type,
                 distance_type: self.distance_type,
                 raw_prop,
+                _marker: PhantomData,
             })
         }
     }
@@ -154,6 +190,7 @@ impl NgtProperties {
                 object_type,
                 distance_type,
                 raw_prop,
+                _marker: PhantomData,
             })
         }
     }
@@ -203,12 +240,6 @@ impl NgtProperties {
         }
 
         Ok(())
-    }
-
-    pub fn object_type(mut self, object_type: NgtObject) -> Result<Self> {
-        self.object_type = object_type;
-        unsafe { Self::set_object_type(self.raw_prop, object_type)? };
-        Ok(self)
     }
 
     unsafe fn set_object_type(raw_prop: sys::NGTProperty, object_type: NgtObject) -> Result<()> {
@@ -316,7 +347,7 @@ impl NgtProperties {
     }
 }
 
-impl Drop for NgtProperties {
+impl<T> Drop for NgtProperties<T> {
     fn drop(&mut self) {
         if !self.raw_prop.is_null() {
             unsafe { sys::ngt_destroy_property(self.raw_prop) };

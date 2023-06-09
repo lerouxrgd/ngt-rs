@@ -7,21 +7,25 @@ use std::ptr;
 use ngt_sys as sys;
 use scopeguard::defer;
 
-use super::{QgObject, QgProperties};
+use super::{QgObject, QgObjectType, QgProperties, QgQuantizationParams};
 use crate::error::{make_err, Error, Result};
 use crate::ngt::NgtIndex;
 use crate::{SearchResult, VecId};
 
 #[derive(Debug)]
-pub struct QgIndex {
-    pub(crate) prop: QgProperties,
+pub struct QgIndex<T> {
+    pub(crate) prop: QgProperties<T>,
     pub(crate) index: sys::NGTQGIndex,
     ebuf: sys::NGTError,
 }
 
-impl QgIndex {
+impl<T> QgIndex<T>
+where
+    T: QgObjectType,
+{
     /// Quantize an NGT index
-    pub fn quantize(index: NgtIndex, params: QgQuantizationParams) -> Result<Self> {
+    pub fn quantize(index: NgtIndex<T>, params: QgQuantizationParams) -> Result<Self> {
+        //
         if !is_x86_feature_detected!("avx2") {
             return Err(Error(
                 "Cannot quantize an index without AVX2 support".into(),
@@ -75,7 +79,7 @@ impl QgIndex {
         }
     }
 
-    pub fn search(&self, query: QgQuery) -> Result<Vec<SearchResult>> {
+    pub fn search(&self, query: QgQuery<T>) -> Result<Vec<SearchResult>> {
         unsafe {
             let results = sys::ngt_create_empty_results(self.ebuf);
             if results.is_null() {
@@ -107,9 +111,9 @@ impl QgIndex {
     }
 
     /// Get the specified vector.
-    pub fn get_vec(&self, id: VecId) -> Result<Vec<f32>> {
+    pub fn get_vec(&self, id: VecId) -> Result<Vec<T>> {
         unsafe {
-            let results = match self.prop.object_type {
+            match self.prop.object_type {
                 QgObject::Float => {
                     let ospace = sys::ngt_get_object_space(self.index, self.ebuf);
                     if ospace.is_null() {
@@ -128,7 +132,8 @@ impl QgIndex {
                     );
                     let results = mem::ManuallyDrop::new(results);
 
-                    results.iter().copied().collect::<Vec<_>>()
+                    let results = results.iter().copied().collect::<Vec<_>>();
+                    Ok(mem::transmute::<_, Vec<T>>(results))
                 }
                 QgObject::Uint8 => {
                     let ospace = sys::ngt_get_object_space(self.index, self.ebuf);
@@ -148,16 +153,15 @@ impl QgIndex {
                     );
                     let results = mem::ManuallyDrop::new(results);
 
-                    results.iter().map(|byte| *byte as f32).collect::<Vec<_>>()
+                    let results = results.iter().copied().collect::<Vec<_>>();
+                    Ok(mem::transmute::<_, Vec<T>>(results))
                 }
-            };
-
-            Ok(results)
+            }
         }
     }
 }
 
-impl Drop for QgIndex {
+impl<T> Drop for QgIndex<T> {
     fn drop(&mut self) {
         if !self.index.is_null() {
             unsafe { sys::ngtqg_close_index(self.index) };
@@ -171,40 +175,16 @@ impl Drop for QgIndex {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct QgQuantizationParams {
-    pub dimension_of_subvector: f32,
-    pub max_number_of_edges: u64,
-}
-
-impl Default for QgQuantizationParams {
-    fn default() -> Self {
-        Self {
-            dimension_of_subvector: 0.0,
-            max_number_of_edges: 128,
-        }
-    }
-}
-
-impl QgQuantizationParams {
-    unsafe fn into_raw(self) -> sys::NGTQGQuantizationParameters {
-        sys::NGTQGQuantizationParameters {
-            dimension_of_subvector: self.dimension_of_subvector,
-            max_number_of_edges: self.max_number_of_edges,
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct QgQuery<'a> {
-    query: &'a [f32],
+pub struct QgQuery<'a, T> {
+    query: &'a [T],
     pub size: u64,
     pub epsilon: f32,
     pub result_expansion: f32,
     pub radius: f32,
 }
 
-impl<'a> QgQuery<'a> {
-    pub fn new(query: &'a [f32]) -> Self {
+impl<'a, T> QgQuery<'a, T> {
+    pub fn new(query: &'a [T]) -> Self {
         Self {
             query,
             size: 20,
@@ -254,7 +234,7 @@ mod tests {
     use tempfile::tempdir;
 
     use super::*;
-    use crate::{NgtDistance, NgtObject, NgtProperties};
+    use crate::{NgtDistance, NgtProperties};
 
     #[test]
     fn test_qg() -> StdResult<(), Box<dyn StdError>> {
@@ -263,19 +243,17 @@ mod tests {
 
         // Create an NGT index for vectors
         let ndims = 3;
-        let props = NgtProperties::dimension(ndims)?
-            .object_type(NgtObject::Uint8)?
-            .distance_type(NgtDistance::L2)?;
+        let props = NgtProperties::<u8>::dimension(ndims)?.distance_type(NgtDistance::L2)?;
         let mut index = NgtIndex::create(dir.path(), props)?;
 
         // Insert vectors and get their ids
-        let nvecs = 16;
+        let nvecs = 64;
         let ids = (1..ndims * nvecs)
             .step_by(ndims)
-            .map(|i| i as f32)
+            .map(|i| i as u8)
             .map(|i| {
                 repeat(i)
-                    .zip((0..ndims).map(|j| j as f32))
+                    .zip((0..ndims).map(|j| j as u8))
                     .map(|(i, j)| i + j)
                     .collect()
             })
@@ -294,7 +272,7 @@ mod tests {
         let index = QgIndex::quantize(index, params)?;
 
         // Perform a vector search (with 2 results)
-        let v: Vec<f32> = (1..=ndims).into_iter().map(|x| x as f32).collect();
+        let v: Vec<u8> = (1..=ndims).into_iter().map(|x| x as u8).collect();
         let query = QgQuery::new(&v).size(2);
         let res = index.search(query)?;
         assert_eq!(ids[0], res[0].id);

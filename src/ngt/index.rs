@@ -9,25 +9,28 @@ use std::ptr;
 use ngt_sys as sys;
 use scopeguard::defer;
 
-use super::{NgtObject, NgtProperties};
+use super::{NgtObject, NgtObjectType, NgtProperties};
 use crate::error::{make_err, Error, Result};
 use crate::{SearchResult, VecId};
 
 #[derive(Debug)]
-pub struct NgtIndex {
+pub struct NgtIndex<T> {
     pub(crate) path: CString,
-    pub(crate) prop: NgtProperties,
+    pub(crate) prop: NgtProperties<T>,
     pub(crate) index: sys::NGTIndex,
     ospace: sys::NGTObjectSpace,
     ebuf: sys::NGTError,
 }
 
-unsafe impl Send for NgtIndex {}
-unsafe impl Sync for NgtIndex {}
+unsafe impl<T> Send for NgtIndex<T> {}
+unsafe impl<T> Sync for NgtIndex<T> {}
 
-impl NgtIndex {
+impl<T> NgtIndex<T>
+where
+    T: NgtObjectType,
+{
     /// Creates an empty ANNG index with the given [`NgtProperties`]().
-    pub fn create<P: AsRef<Path>>(path: P, prop: NgtProperties) -> Result<Self> {
+    pub fn create<P: AsRef<Path>>(path: P, prop: NgtProperties<T>) -> Result<Self> {
         if cfg!(feature = "shared_mem") && path.as_ref().exists() {
             Err(Error(format!("Path {:?} already exists", path.as_ref())))?
         }
@@ -190,19 +193,33 @@ impl NgtIndex {
     /// discoverable yet.
     ///
     /// **The method [`build`](NgtIndex::build) must be called after inserting vectors**.
-    pub fn insert(&mut self, mut vec: Vec<f32>) -> Result<VecId> {
+    pub fn insert(&mut self, mut vec: Vec<T>) -> Result<VecId> {
         unsafe {
-            let id = sys::ngt_insert_index_as_float(
-                self.index,
-                vec.as_mut_ptr(),
-                self.prop.dimension as u32,
-                self.ebuf,
-            );
+            let id = match self.prop.object_type {
+                NgtObject::Float => sys::ngt_insert_index_as_float(
+                    self.index,
+                    vec.as_mut_ptr() as *mut _,
+                    self.prop.dimension as u32,
+                    self.ebuf,
+                ),
+                NgtObject::Uint8 => sys::ngt_insert_index_as_uint8(
+                    self.index,
+                    vec.as_mut_ptr() as *mut _,
+                    self.prop.dimension as u32,
+                    self.ebuf,
+                ),
+                NgtObject::Float16 => sys::ngt_insert_index_as_float16(
+                    self.index,
+                    vec.as_mut_ptr() as *mut _,
+                    self.prop.dimension as u32,
+                    self.ebuf,
+                ),
+            };
             if id == 0 {
                 Err(make_err(self.ebuf))?
+            } else {
+                Ok(id)
             }
-
-            Ok(id)
         }
     }
 
@@ -265,9 +282,9 @@ impl NgtIndex {
     }
 
     /// Get the specified vector.
-    pub fn get_vec(&self, id: VecId) -> Result<Vec<f32>> {
+    pub fn get_vec(&self, id: VecId) -> Result<Vec<T>> {
         unsafe {
-            let results = match self.prop.object_type {
+            match self.prop.object_type {
                 NgtObject::Float => {
                     let results = sys::ngt_get_object_as_float(self.ospace, id, self.ebuf);
                     if results.is_null() {
@@ -281,7 +298,8 @@ impl NgtIndex {
                     );
                     let results = mem::ManuallyDrop::new(results);
 
-                    results.iter().copied().collect::<Vec<_>>()
+                    let results = results.iter().copied().collect::<Vec<_>>();
+                    Ok(mem::transmute::<_, Vec<T>>(results))
                 }
                 NgtObject::Float16 => {
                     let results = sys::ngt_get_object(self.ospace, id, self.ebuf);
@@ -296,7 +314,8 @@ impl NgtIndex {
                     );
                     let results = mem::ManuallyDrop::new(results);
 
-                    results.iter().map(|f16| f16.to_f32()).collect::<Vec<_>>()
+                    let results = results.iter().copied().collect::<Vec<_>>();
+                    Ok(mem::transmute::<_, Vec<T>>(results))
                 }
                 NgtObject::Uint8 => {
                     let results = sys::ngt_get_object_as_integer(self.ospace, id, self.ebuf);
@@ -311,11 +330,10 @@ impl NgtIndex {
                     );
                     let results = mem::ManuallyDrop::new(results);
 
-                    results.iter().map(|&byte| byte as f32).collect::<Vec<_>>()
+                    let results = results.iter().copied().collect::<Vec<_>>();
+                    Ok(mem::transmute::<_, Vec<T>>(results))
                 }
-            };
-
-            Ok(results)
+            }
         }
     }
 
@@ -330,7 +348,7 @@ impl NgtIndex {
     }
 }
 
-impl Drop for NgtIndex {
+impl<T> Drop for NgtIndex<T> {
     fn drop(&mut self) {
         if !self.index.is_null() {
             unsafe { sys::ngt_close_index(self.index) };
@@ -364,7 +382,7 @@ mod tests {
         }
 
         // Create an index for vectors of dimension 3
-        let prop = NgtProperties::dimension(3)?;
+        let prop = NgtProperties::<f32>::dimension(3)?;
         let mut index = NgtIndex::create(dir.path(), prop)?;
 
         // Insert two vectors and get their id
@@ -431,7 +449,7 @@ mod tests {
         }
 
         // Create an index for vectors of dimension 3
-        let prop = NgtProperties::dimension(3)?;
+        let prop = NgtProperties::<f32>::dimension(3)?;
         let mut index = NgtIndex::create(dir.path(), prop)?;
 
         // Batch insert 2 vectors, build and persist the index
@@ -456,7 +474,7 @@ mod tests {
         }
 
         // Create an index for vectors of dimension 3
-        let prop = NgtProperties::dimension(3)?.object_type(NgtObject::Uint8)?;
+        let prop = NgtProperties::<u8>::dimension(3)?;
         let mut index = NgtIndex::create(dir.path(), prop)?;
 
         // Batch insert 2 vectors, build and persist the index
@@ -481,7 +499,7 @@ mod tests {
         }
 
         // Create an index for vectors of dimension 3
-        let prop = NgtProperties::dimension(3)?.object_type(NgtObject::Float16)?;
+        let prop = NgtProperties::<half::f16>::dimension(3)?;
         let mut index = NgtIndex::create(dir.path(), prop)?;
 
         // Batch insert 2 vectors, build and persist the index
@@ -506,7 +524,7 @@ mod tests {
         }
 
         // Create an index for vectors of dimension 3
-        let prop = NgtProperties::dimension(3)?;
+        let prop = NgtProperties::<f32>::dimension(3)?;
         let mut index = NgtIndex::create(dir.path(), prop)?;
 
         let vecs = vec![
