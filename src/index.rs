@@ -771,7 +771,6 @@ mod tests {
         let prop = Properties::dimension(3)?;
         let mut index = Index::create(dir.path(), prop)?;
 
-        // for loop 10 times
         for _ in 0..120 {
             let vec = vec![1.0, 2.0, 3.0];
             let id = index.insert(vec.clone())?;
