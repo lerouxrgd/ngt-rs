@@ -756,4 +756,33 @@ mod tests {
         dir.close()?;
         Ok(())
     }
+
+    // test adding and calling build multiple times
+    #[cfg(not(feature = "shared_mem"))]
+    #[test]
+    fn test_incremental_insert_and_build() -> StdResult<(), Box<dyn StdError>> {
+        // Get a temporary directory to store the index
+        let dir = tempdir()?;
+        if cfg!(feature = "shared_mem") {
+            std::fs::remove_dir(dir.path())?;
+        }
+
+        // Create an index for vectors of dimension 3
+        let prop = Properties::dimension(3)?;
+        let mut index = Index::create(dir.path(), prop)?;
+
+        // for loop 10 times
+        for _ in 0..120 {
+            let vec = vec![1.0, 2.0, 3.0];
+            let id = index.insert(vec.clone())?;
+            println!("inserted vector with id {}", id);
+
+            // Build and persist the index
+            index.build(1)?;
+            index.persist()?;
+        }
+
+        assert_eq!(0, 0);
+        Ok(())
+    }
 }
