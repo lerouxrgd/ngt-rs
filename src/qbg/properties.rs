@@ -1,13 +1,17 @@
 use std::marker::PhantomData;
 
+use half::f16;
 use ngt_sys as sys;
 use num_enum::TryFromPrimitive;
+
+use crate::error::Error;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, TryFromPrimitive)]
 #[repr(i32)]
 pub enum QbgObject {
     Uint8 = 0,
     Float = 1,
+    Float16 = 2,
 }
 
 mod private {
@@ -29,6 +33,13 @@ impl private::Sealed for u8 {}
 impl QbgObjectType for u8 {
     fn as_obj() -> QbgObject {
         QbgObject::Uint8
+    }
+}
+
+impl private::Sealed for f16 {}
+impl QbgObjectType for f16 {
+    fn as_obj() -> QbgObject {
+        QbgObject::Float16
     }
 }
 
@@ -55,10 +66,10 @@ where
     T: QbgObjectType,
 {
     pub fn dimension(dimension: u64) -> Self {
-        let extended_dimension = 0;
+        let extended_dimension = next_multiple_of_16(dimension);
         let number_of_subvectors = 1;
         let number_of_blobs = 0;
-        let internal_data_type = QbgObject::Float; // TODO: Should be T::as_obj() ?
+        let internal_data_type = T::as_obj();
         let data_type = T::as_obj();
         let distance_type = QbgDistance::L2;
 
@@ -74,9 +85,16 @@ where
         }
     }
 
-    pub fn extended_dimension(mut self, extended_dimension: u64) -> Self {
-        self.extended_dimension = extended_dimension;
-        self
+    pub fn extended_dimension(mut self, extended_dimension: u64) -> Result<Self, Error> {
+        if extended_dimension % 16 == 0 && extended_dimension >= self.dimension {
+            self.extended_dimension = extended_dimension;
+            Ok(self)
+        } else {
+            Err(Error(format!(
+                "Invalid extended_dimension: {}, must be a multiple of 16 greater or equal to dimension",
+                extended_dimension
+            )))
+        }
     }
 
     pub fn number_of_subvectors(mut self, number_of_subvectors: u64) -> Self {
@@ -110,6 +128,10 @@ where
             distance_type: self.distance_type as i32,
         }
     }
+}
+
+fn next_multiple_of_16(x: u64) -> u64 {
+    ((x + 15) / 16) * 16
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, TryFromPrimitive)]
@@ -256,5 +278,22 @@ impl QbgBuildParams {
             rotation: self.rotation,
             repositioning: self.repositioning,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_qbg_params() {
+        let params = QbgConstructParams::<f32>::dimension(3);
+        assert_eq!(params.extended_dimension, 16);
+
+        let params = QbgConstructParams::<u8>::dimension(16);
+        assert_eq!(params.extended_dimension, 16);
+
+        let params = QbgConstructParams::<f32>::dimension(513);
+        assert_eq!(params.extended_dimension, 528);
     }
 }

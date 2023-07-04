@@ -12,7 +12,7 @@ readme = "README.md"
 
 [dependencies]
 half = "2"
-ngt-sys = { path = "ngt-sys", version = "2.0.12" }
+ngt-sys = { path = "ngt-sys", version = "2.1.2" }
 num_enum = "0.5"
 scopeguard = "1"
 
@@ -22,8 +22,9 @@ rayon = "1"
 tempfile = "3"
 
 [features]
-default = ["quantized"] # TODO: should not be default
+default = ["quantized", "qg_optim"]          # TODO: should not be default
 static = ["ngt-sys/static"]
 shared_mem = ["ngt-sys/shared_mem"]
 large_data = ["ngt-sys/large_data"]
 quantized = ["ngt-sys/quantized"]
+qg_optim = ["quantized", "ngt-sys/qg_optim"]

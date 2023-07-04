@@ -21,10 +21,12 @@ jobs:
           - shared_mem
           - large_data
           - quantized
+          - quantized,qg_optim
           - large_data,shared_mem
           - large_data,quantized
           - static
           - static,quantized
+          - static,quantized,qg_optim
           - static,shared_mem,large_data
     steps:
       - uses: actions/checkout@v3

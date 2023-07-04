@@ -4,6 +4,7 @@ use std::os::unix::ffi::OsStrExt;
 use std::path::Path;
 use std::{mem, ptr};
 
+use half::f16;
 use ngt_sys as sys;
 use scopeguard::defer;
 
@@ -17,7 +18,6 @@ pub struct QbgIndex<T, M> {
     pub(crate) index: sys::QBGIndex,
     path: CString,
     _mode: M,
-    obj_type: QbgObject,
     dimension: u32,
     ebuf: sys::NGTError,
     _marker: PhantomData<T>,
@@ -62,23 +62,39 @@ where
                 path,
                 _mode: ModeWrite,
                 dimension,
-                obj_type: T::as_obj(),
                 ebuf: sys::ngt_create_error_object(),
                 _marker: PhantomData,
             })
         }
     }
 
-    // TODO: should be mut vec: Vec<T>
-    pub fn insert(&mut self, mut vec: Vec<f32>) -> Result<VecId> {
+    pub fn insert(&mut self, mut vec: Vec<T>) -> Result<VecId> {
         unsafe {
-            let id =
-                sys::qbg_append_object(self.index, vec.as_mut_ptr(), self.dimension, self.ebuf);
+            let id = match T::as_obj() {
+                QbgObject::Float => sys::qbg_append_object(
+                    self.index,
+                    vec.as_mut_ptr() as *mut _,
+                    self.dimension,
+                    self.ebuf,
+                ),
+                QbgObject::Uint8 => sys::qbg_append_object_as_uint8(
+                    self.index,
+                    vec.as_mut_ptr() as *mut _,
+                    self.dimension,
+                    self.ebuf,
+                ),
+                QbgObject::Float16 => sys::qbg_append_object_as_float16(
+                    self.index,
+                    vec.as_mut_ptr() as *mut _,
+                    self.dimension,
+                    self.ebuf,
+                ),
+            };
             if id == 0 {
                 Err(make_err(self.ebuf))?
+            } else {
+                Ok(id)
             }
-
-            Ok(id)
         }
     }
 
@@ -145,7 +161,6 @@ where
                 index,
                 path,
                 _mode: ModeRead,
-                obj_type: T::as_obj(),
                 dimension,
                 ebuf: sys::ngt_create_error_object(),
                 _marker: PhantomData,
@@ -153,7 +168,7 @@ where
         }
     }
 
-    pub fn search(&self, query: QbgQuery) -> Result<Vec<SearchResult>> {
+    pub fn search(&self, query: QbgQuery<T>) -> Result<Vec<SearchResult>> {
         unsafe {
             let results = sys::ngt_create_empty_results(self.ebuf);
             if results.is_null() {
@@ -161,14 +176,40 @@ where
             }
             defer! { sys::qbg_destroy_results(results); }
 
-            if !sys::qbg_search_index(self.index, query.into_raw(), results, self.ebuf) {
-                Err(make_err(self.ebuf))?
+            match T::as_obj() {
+                QbgObject::Float => {
+                    let q = sys::QBGQueryFloat {
+                        query: query.query.as_ptr() as *mut f32,
+                        params: query.params(),
+                    };
+                    if !sys::qbg_search_index_float(self.index, q, results, self.ebuf) {
+                        Err(make_err(self.ebuf))?
+                    }
+                }
+                QbgObject::Uint8 => {
+                    let q = sys::QBGQueryUint8 {
+                        query: query.query.as_ptr() as *mut u8,
+                        params: query.params(),
+                    };
+                    if !sys::qbg_search_index_uint8(self.index, q, results, self.ebuf) {
+                        Err(make_err(self.ebuf))?
+                    }
+                }
+                QbgObject::Float16 => {
+                    let q = sys::QBGQueryFloat16 {
+                        query: query.query.as_ptr() as *mut _,
+                        params: query.params(),
+                    };
+                    if !sys::qbg_search_index_float16(self.index, q, results, self.ebuf) {
+                        Err(make_err(self.ebuf))?
+                    }
+                }
             }
 
             let rsize = sys::qbg_get_result_size(results, self.ebuf);
             let mut ret = Vec::with_capacity(rsize as usize);
 
-            for i in 0..rsize as u32 {
+            for i in 0..rsize {
                 let d = sys::qbg_get_result(results, i, self.ebuf);
                 if d.id == 0 && d.distance == 0.0 {
                     Err(make_err(self.ebuf))?
@@ -206,7 +247,6 @@ where
                 index,
                 path,
                 _mode: ModeWrite,
-                obj_type: T::as_obj(),
                 dimension,
                 ebuf: sys::ngt_create_error_object(),
                 _marker: PhantomData,
@@ -223,38 +263,41 @@ where
     /// Get the specified vector.
     pub fn get_vec(&self, id: VecId) -> Result<Vec<T>> {
         unsafe {
-            match self.obj_type {
+            match T::as_obj() {
                 QbgObject::Float => {
                     let results = sys::qbg_get_object(self.index, id, self.ebuf);
                     if results.is_null() {
                         Err(make_err(self.ebuf))?
                     }
-
                     let results = Vec::from_raw_parts(
                         results as *mut f32,
                         self.dimension as usize,
                         self.dimension as usize,
                     );
-                    let results = mem::ManuallyDrop::new(results);
-
-                    let results = results.iter().copied().collect::<Vec<_>>();
                     Ok(mem::transmute::<_, Vec<T>>(results))
                 }
                 QbgObject::Uint8 => {
-                    // TODO: Would need some kind of qbg_get_object_as_integer
-                    let results = sys::qbg_get_object(self.index, id, self.ebuf);
+                    let results = sys::qbg_get_object_as_uint8(self.index, id, self.ebuf);
                     if results.is_null() {
                         Err(make_err(self.ebuf))?
                     }
-
                     let results = Vec::from_raw_parts(
-                        results as *mut f32,
+                        results as *mut u8,
                         self.dimension as usize,
                         self.dimension as usize,
                     );
-                    let results = mem::ManuallyDrop::new(results);
-
-                    let results = results.iter().copied().collect::<Vec<_>>();
+                    Ok(mem::transmute::<_, Vec<T>>(results))
+                }
+                QbgObject::Float16 => {
+                    let results = sys::qbg_get_object_as_float16(self.index, id, self.ebuf);
+                    if results.is_null() {
+                        Err(make_err(self.ebuf))?
+                    }
+                    let results = Vec::from_raw_parts(
+                        results as *mut f16,
+                        self.dimension as usize,
+                        self.dimension as usize,
+                    );
                     Ok(mem::transmute::<_, Vec<T>>(results))
                 }
             }
@@ -294,8 +337,8 @@ impl private::Sealed for ModeWrite {}
 impl IndexMode for ModeWrite {}
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct QbgQuery<'a> {
-    query: &'a [f32],
+pub struct QbgQuery<'a, T> {
+    query: &'a [T],
     pub size: u64,
     pub epsilon: f32,
     pub blob_epsilon: f32,
@@ -305,8 +348,11 @@ pub struct QbgQuery<'a> {
     pub radius: f32,
 }
 
-impl<'a> QbgQuery<'a> {
-    pub fn new(query: &'a [f32]) -> Self {
+impl<'a, T> QbgQuery<'a, T>
+where
+    T: QbgObjectType,
+{
+    pub fn new(query: &'a [T]) -> Self {
         Self {
             query,
             size: 20,
@@ -354,9 +400,8 @@ impl<'a> QbgQuery<'a> {
         self
     }
 
-    unsafe fn into_raw(self) -> sys::QBGQuery {
-        sys::QBGQuery {
-            query: self.query.as_ptr() as *mut f32,
+    unsafe fn params(&self) -> sys::QBGQueryParameters {
+        sys::QBGQueryParameters {
             number_of_results: self.size,
             epsilon: self.epsilon,
             blob_epsilon: self.blob_epsilon,
@@ -379,7 +424,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_qbg() -> StdResult<(), Box<dyn StdError>> {
+    fn test_qbg_f32() -> StdResult<(), Box<dyn StdError>> {
         // Get a temporary directory to store the index
         let dir = tempdir()?;
         std::fs::remove_dir(dir.path())?;
@@ -389,7 +434,7 @@ mod tests {
         let mut index = QbgIndex::create(dir.path(), QbgConstructParams::dimension(ndims))?;
 
         // Insert vectors and get their ids
-        let nvecs = 16;
+        let nvecs = 64;
         let ids = (1..ndims * nvecs)
             .step_by(ndims as usize)
             .map(|i| i as f32)
@@ -414,6 +459,91 @@ mod tests {
         let res = index.search(query)?;
         assert_eq!(ids[0], res[0].id);
         assert_eq!(v, index.get_vec(ids[0])?);
+
+        dir.close()?;
+        Ok(())
+    }
+
+    #[test]
+    fn test_qbg_f16() -> StdResult<(), Box<dyn StdError>> {
+        // Get a temporary directory to store the index
+        let dir = tempdir()?;
+        std::fs::remove_dir(dir.path())?;
+
+        // Create a QGB index
+        let ndims = 3;
+        let mut index = QbgIndex::create(dir.path(), QbgConstructParams::dimension(ndims))?;
+
+        // Insert vectors and get their ids
+        let nvecs = 64;
+        let ids = (1..ndims * nvecs)
+            .step_by(ndims as usize)
+            .map(|i| f16::from_f32(i as f32))
+            .map(|i| {
+                repeat(i)
+                    .zip((0..ndims).map(|j| f16::from_f32(j as f32)))
+                    .map(|(i, j)| i + j)
+                    .collect()
+            })
+            .map(|vector| index.insert(vector))
+            .collect::<Result<Vec<_>>>()?;
+
+        // Build and persist the index
+        index.build(QbgBuildParams::default())?;
+        index.persist()?;
+
+        let index = index.into_readable()?;
+
+        // Perform a vector search (with 2 results)
+        let v: Vec<f16> = (1..=ndims)
+            .into_iter()
+            .map(|x| f16::from_f32(x as f32))
+            .collect();
+        let query = QbgQuery::new(&v).size(2);
+        let res = index.search(query)?;
+        assert_eq!(ids[0], res[0].id);
+        assert_eq!(v, index.get_vec(ids[0])?);
+
+        dir.close()?;
+        Ok(())
+    }
+
+    #[test]
+    fn test_qbg_u8() -> StdResult<(), Box<dyn StdError>> {
+        // Get a temporary directory to store the index
+        let dir = tempdir()?;
+        std::fs::remove_dir(dir.path())?;
+
+        // Create a QGB index
+        let ndims = 3;
+        let mut index = QbgIndex::create(dir.path(), QbgConstructParams::dimension(ndims))?;
+
+        // Insert vectors and get their ids
+        let nvecs = 64;
+        let ids = (1..ndims * nvecs)
+            .step_by(ndims as usize)
+            .map(|i| i as u8)
+            .map(|i| {
+                repeat(i)
+                    .zip((0..ndims).map(|j| j as u8))
+                    .map(|(i, j)| i + j)
+                    .collect()
+            })
+            .map(|vector| index.insert(vector))
+            .collect::<Result<Vec<_>>>()?;
+
+        // Build and persist the index
+        index.build(QbgBuildParams::default())?;
+        index.persist()?;
+
+        let index = index.into_readable()?;
+
+        // Perform a vector search (with 3 results)
+        let v: Vec<u8> = (1..=ndims).into_iter().map(|x| x as u8).collect();
+        let query = QbgQuery::new(&v).size(3);
+        let res = index.search(query)?;
+        assert!(Vec::from_iter(res[0..3].iter().map(|r| r.id)).contains(&ids[0]));
+        assert!(v == index.get_vec(ids[0])?);
 
         dir.close()?;
         Ok(())

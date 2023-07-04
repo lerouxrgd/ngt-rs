@@ -4,6 +4,7 @@ use std::os::unix::ffi::OsStrExt;
 use std::path::Path;
 use std::ptr;
 
+use half::f16;
 use ngt_sys as sys;
 use scopeguard::defer;
 
@@ -87,14 +88,40 @@ where
             }
             defer! { sys::ngt_destroy_results(results); }
 
-            if !sys::ngtqg_search_index(self.index, query.into_raw(), results, self.ebuf) {
-                Err(make_err(self.ebuf))?
+            match T::as_obj() {
+                QgObject::Float => {
+                    let q = sys::NGTQGQueryFloat {
+                        query: query.query.as_ptr() as *mut f32,
+                        params: query.params(),
+                    };
+                    if !sys::ngtqg_search_index_float(self.index, q, results, self.ebuf) {
+                        Err(make_err(self.ebuf))?
+                    }
+                }
+                QgObject::Uint8 => {
+                    let q = sys::NGTQGQueryUint8 {
+                        query: query.query.as_ptr() as *mut u8,
+                        params: query.params(),
+                    };
+                    if !sys::ngtqg_search_index_uint8(self.index, q, results, self.ebuf) {
+                        Err(make_err(self.ebuf))?
+                    }
+                }
+                QgObject::Float16 => {
+                    let q = sys::NGTQGQueryFloat16 {
+                        query: query.query.as_ptr() as *mut _,
+                        params: query.params(),
+                    };
+                    if !sys::ngtqg_search_index_float16(self.index, q, results, self.ebuf) {
+                        Err(make_err(self.ebuf))?
+                    }
+                }
             }
 
             let rsize = sys::ngt_get_result_size(results, self.ebuf);
             let mut ret = Vec::with_capacity(rsize as usize);
 
-            for i in 0..rsize as u32 {
+            for i in 0..rsize {
                 let d = sys::ngt_get_result(results, i, self.ebuf);
                 if d.id == 0 && d.distance == 0.0 {
                     Err(make_err(self.ebuf))?
@@ -156,6 +183,27 @@ where
                     let results = results.iter().copied().collect::<Vec<_>>();
                     Ok(mem::transmute::<_, Vec<T>>(results))
                 }
+                QgObject::Float16 => {
+                    let ospace = sys::ngt_get_object_space(self.index, self.ebuf);
+                    if ospace.is_null() {
+                        Err(make_err(self.ebuf))?
+                    }
+
+                    let results = sys::ngt_get_object_as_float16(ospace, id, self.ebuf);
+                    if results.is_null() {
+                        Err(make_err(self.ebuf))?
+                    }
+
+                    let results = Vec::from_raw_parts(
+                        results as *mut f16,
+                        self.prop.dimension as usize,
+                        self.prop.dimension as usize,
+                    );
+                    let results = mem::ManuallyDrop::new(results);
+
+                    let results = results.iter().copied().collect::<Vec<_>>();
+                    Ok(mem::transmute::<_, Vec<T>>(results))
+                }
             }
         }
     }
@@ -183,7 +231,10 @@ pub struct QgQuery<'a, T> {
     pub radius: f32,
 }
 
-impl<'a, T> QgQuery<'a, T> {
+impl<'a, T> QgQuery<'a, T>
+where
+    T: QgObjectType,
+{
     pub fn new(query: &'a [T]) -> Self {
         Self {
             query,
@@ -214,9 +265,8 @@ impl<'a, T> QgQuery<'a, T> {
         self
     }
 
-    unsafe fn into_raw(self) -> sys::NGTQGQuery {
-        sys::NGTQGQuery {
-            query: self.query.as_ptr() as *mut f32,
+    unsafe fn params(&self) -> sys::NGTQGQueryParameters {
+        sys::NGTQGQueryParameters {
             size: self.size,
             epsilon: self.epsilon,
             result_expansion: self.result_expansion,
@@ -237,7 +287,102 @@ mod tests {
     use crate::{NgtDistance, NgtProperties};
 
     #[test]
-    fn test_qg() -> StdResult<(), Box<dyn StdError>> {
+    fn test_qg_f32() -> StdResult<(), Box<dyn StdError>> {
+        // Get a temporary directory to store the index
+        let dir = tempdir()?;
+
+        // Create an NGT index for vectors
+        let ndims = 3;
+        let props = NgtProperties::<f32>::dimension(ndims)?.distance_type(NgtDistance::L2)?;
+        let mut index = NgtIndex::create(dir.path(), props)?;
+
+        // Insert vectors and get their ids
+        let nvecs = 64;
+        let ids = (1..ndims * nvecs)
+            .step_by(ndims)
+            .map(|i| i as f32)
+            .map(|i| {
+                repeat(i)
+                    .zip((0..ndims).map(|j| j as f32))
+                    .map(|(i, j)| i + j)
+                    .collect()
+            })
+            .map(|vector| index.insert(vector))
+            .collect::<Result<Vec<_>>>()?;
+
+        // Build and persist the index
+        index.build(1)?;
+        index.persist()?;
+
+        // Quantize the index
+        let params = QgQuantizationParams {
+            dimension_of_subvector: 1.,
+            max_number_of_edges: 50,
+        };
+        let index = QgIndex::quantize(index, params)?;
+
+        // Perform a vector search (with 3 results)
+        let v: Vec<f32> = (1..=ndims).into_iter().map(|x| x as f32).collect();
+        let query = QgQuery::new(&v).size(3);
+        let res = index.search(query)?;
+        assert!(ids[0] == res[0].id);
+        assert!(v == index.get_vec(ids[0])?);
+
+        dir.close()?;
+        Ok(())
+    }
+
+    #[test]
+    fn test_qg_f16() -> StdResult<(), Box<dyn StdError>> {
+        // Get a temporary directory to store the index
+        let dir = tempdir()?;
+
+        // Create an NGT index for vectors
+        let ndims = 3;
+        let props = NgtProperties::<f16>::dimension(ndims)?.distance_type(NgtDistance::L2)?;
+        let mut index = NgtIndex::create(dir.path(), props)?;
+
+        // Insert vectors and get their ids
+        let nvecs = 64;
+        let ids = (1..ndims * nvecs)
+            .step_by(ndims)
+            .map(|i| f16::from_f32(i as f32))
+            .map(|i| {
+                repeat(i)
+                    .zip((0..ndims).map(|j| f16::from_f32(j as f32)))
+                    .map(|(i, j)| i + j)
+                    .collect()
+            })
+            .map(|vector| index.insert(vector))
+            .collect::<Result<Vec<_>>>()?;
+
+        // Build and persist the index
+        index.build(1)?;
+        index.persist()?;
+
+        // Quantize the index
+        let params = QgQuantizationParams {
+            dimension_of_subvector: 1.,
+            max_number_of_edges: 50,
+        };
+        let index = QgIndex::quantize(index, params)?;
+
+        // Perform a vector search (with 3 results)
+        let v: Vec<f16> = (1..=ndims)
+            .into_iter()
+            .map(|x| f16::from_f32(x as f32))
+            .collect();
+        let query = QgQuery::new(&v).size(3);
+        let res = index.search(query)?;
+        assert!(ids[0] == res[0].id);
+        assert!(v == index.get_vec(ids[0])?);
+
+        dir.close()?;
+        Ok(())
+    }
+
+    #[test]
+    fn test_qg_u8() -> StdResult<(), Box<dyn StdError>> {
         // Get a temporary directory to store the index
         let dir = tempdir()?;
 
@@ -271,12 +416,12 @@ mod tests {
         };
         let index = QgIndex::quantize(index, params)?;
 
-        // Perform a vector search (with 2 results)
+        // Perform a vector search (with 3 results)
         let v: Vec<u8> = (1..=ndims).into_iter().map(|x| x as u8).collect();
-        let query = QgQuery::new(&v).size(2);
-        let res = index.search(query)?;
-        assert_eq!(ids[0], res[0].id);
-        assert_eq!(v, index.get_vec(ids[0])?);
+        let query = QgQuery::new(&v).size(3);
+        let res = &index.search(query)?;
+        assert!(Vec::from_iter(res[0..3].iter().map(|r| r.id)).contains(&ids[0]));
+        assert!(v == index.get_vec(ids[0])?);
 
         dir.close()?;
         Ok(())

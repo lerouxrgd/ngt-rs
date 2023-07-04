@@ -14,9 +14,10 @@ This crate provides the following indexes:
 * `QgIndex`: Quantized graph-based index[^2]
 * `QbgIndex`: Quantized blob graph-based index
 
-The quantized indexes are available through the `quantized` Cargo feature. Note that
+Both quantized indexes are available through the `quantized` Cargo feature. Note that
 they rely on `BLAS` and `LAPACK` which thus have to be installed locally. The CPU
-running the code must also support `AVX2` instructions.
+running the code must also support `AVX2` instructions. Furthermore, `QgIndex`
+performances can be [improved][qg-optim] by using the `qg_optim` Cargo feature.
 
 The `NgtIndex` default implementation is an ANNG, it can be optimized[^3] or converted
 to an ONNG through the [`optim`][ngt-optim] module.
@@ -95,6 +96,7 @@ index.persist()?;
 [ngt-largedata]: https://github.com/yahoojapan/NGT#large-scale-data-use
 [ngt-ci]: https://github.com/lerouxrgd/ngt-rs/blob/master/.github/workflows/ci.yaml
 [ngt-optim]: https://docs.rs/ngt/latest/ngt/optim/index.html
+[qg-optim]: https://github.com/yahoojapan/NGT#build-parameters-1
 
 [^1]: https://opensource.com/article/19/10/ngt-open-source-library
 [^2]: https://medium.com/@masajiro.iwasaki/fusion-of-graph-based-indexing-and-product-quantization-for-ann-search-7d1f0336d0d0

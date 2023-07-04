@@ -132,7 +132,7 @@ where
             let rsize = sys::ngt_get_result_size(results, self.ebuf);
             let mut ret = Vec::with_capacity(rsize as usize);
 
-            for i in 0..rsize as u32 {
+            for i in 0..rsize {
                 let d = sys::ngt_get_result(results, i, self.ebuf);
                 if d.id == 0 && d.distance == 0.0 {
                     Err(make_err(self.ebuf))?
@@ -173,7 +173,7 @@ where
             let rsize = sys::ngt_get_result_size(results, self.ebuf);
             let mut ret = Vec::with_capacity(rsize as usize);
 
-            for i in 0..rsize as u32 {
+            for i in 0..rsize {
                 let d = sys::ngt_get_result(results, i, self.ebuf);
                 if d.id == 0 && d.distance == 0.0 {
                     Err(make_err(self.ebuf))?
@@ -198,13 +198,13 @@ where
             let id = match self.prop.object_type {
                 NgtObject::Float => sys::ngt_insert_index_as_float(
                     self.index,
-                    vec.as_mut_ptr() as *mut _,
+                    vec.as_mut_ptr() as *mut f32,
                     self.prop.dimension as u32,
                     self.ebuf,
                 ),
                 NgtObject::Uint8 => sys::ngt_insert_index_as_uint8(
                     self.index,
-                    vec.as_mut_ptr() as *mut _,
+                    vec.as_mut_ptr() as *mut u8,
                     self.prop.dimension as u32,
                     self.ebuf,
                 ),
@@ -227,7 +227,7 @@ where
     /// discoverable yet.
     ///
     /// **The method [`build`](NgtIndex::build) must be called after inserting vectors**.
-    pub fn insert_batch(&mut self, batch: Vec<Vec<f32>>) -> Result<()> {
+    pub fn insert_batch(&mut self, batch: Vec<Vec<T>>) -> Result<()> {
         let batch_size = u32::try_from(batch.len())?;
 
         if batch_size > 0 {
@@ -243,9 +243,38 @@ where
         }
 
         unsafe {
-            let mut batch = batch.into_iter().flatten().collect::<Vec<f32>>();
-            if !sys::ngt_batch_append_index(self.index, batch.as_mut_ptr(), batch_size, self.ebuf) {
-                Err(make_err(self.ebuf))?
+            let mut batch = batch.into_iter().flatten().collect::<Vec<T>>();
+            match self.prop.object_type {
+                NgtObject::Float => {
+                    if !sys::ngt_batch_append_index(
+                        self.index,
+                        batch.as_mut_ptr() as *mut f32,
+                        batch_size,
+                        self.ebuf,
+                    ) {
+                        Err(make_err(self.ebuf))?
+                    }
+                }
+                NgtObject::Uint8 => {
+                    if !sys::ngt_batch_append_index_as_uint8(
+                        self.index,
+                        batch.as_mut_ptr() as *mut u8,
+                        batch_size,
+                        self.ebuf,
+                    ) {
+                        Err(make_err(self.ebuf))?
+                    }
+                }
+                NgtObject::Float16 => {
+                    if !sys::ngt_batch_append_index_as_float16(
+                        self.index,
+                        batch.as_mut_ptr() as *mut _,
+                        batch_size,
+                        self.ebuf,
+                    ) {
+                        Err(make_err(self.ebuf))?
+                    }
+                }
             }
             Ok(())
         }
@@ -367,6 +396,7 @@ mod tests {
     use std::iter;
     use std::result::Result as StdResult;
 
+    use half::f16;
     use rayon::prelude::*;
     use tempfile::tempdir;
 
@@ -374,7 +404,7 @@ mod tests {
     use crate::EPSILON;
 
     #[test]
-    fn test_basics() -> StdResult<(), Box<dyn StdError>> {
+    fn test_ngt_f32_basics() -> StdResult<(), Box<dyn StdError>> {
         // Get a temporary directory to store the index
         let dir = tempdir()?;
         if cfg!(feature = "shared_mem") {
@@ -441,7 +471,7 @@ mod tests {
     }
 
     #[test]
-    fn test_batch() -> StdResult<(), Box<dyn StdError>> {
+    fn test_ngt_batch() -> StdResult<(), Box<dyn StdError>> {
         // Get a temporary directory to store the index
         let dir = tempdir()?;
         if cfg!(feature = "shared_mem") {
@@ -466,7 +496,7 @@ mod tests {
     }
 
     #[test]
-    fn test_u8() -> StdResult<(), Box<dyn StdError>> {
+    fn test_ngt_u8() -> StdResult<(), Box<dyn StdError>> {
         // Get a temporary directory to store the index
         let dir = tempdir()?;
         if cfg!(feature = "shared_mem") {
@@ -477,8 +507,9 @@ mod tests {
         let prop = NgtProperties::<u8>::dimension(3)?;
         let mut index = NgtIndex::create(dir.path(), prop)?;
 
-        // Batch insert 2 vectors, build and persist the index
-        index.insert_batch(vec![vec![1.0, 2.0, 3.0], vec![4.0, 5.0, 6.0]])?;
+        // Insert 3 vectors, build and persist the index
+        index.insert_batch(vec![vec![1, 2, 3], vec![4, 5, 6]])?;
+        index.insert(vec![7, 8, 9])?;
         index.build(2)?;
         index.persist()?;
 
@@ -491,7 +522,7 @@ mod tests {
     }
 
     #[test]
-    fn test_f16() -> StdResult<(), Box<dyn StdError>> {
+    fn test_ngt_f16() -> StdResult<(), Box<dyn StdError>> {
         // Get a temporary directory to store the index
         let dir = tempdir()?;
         if cfg!(feature = "shared_mem") {
@@ -499,11 +530,15 @@ mod tests {
         }
 
         // Create an index for vectors of dimension 3
-        let prop = NgtProperties::<half::f16>::dimension(3)?;
+        let prop = NgtProperties::<f16>::dimension(3)?;
         let mut index = NgtIndex::create(dir.path(), prop)?;
 
-        // Batch insert 2 vectors, build and persist the index
-        index.insert_batch(vec![vec![1.0, 2.0, 3.0], vec![4.0, 5.0, 6.0]])?;
+        // Insert 3 vectors, build and persist the index
+        index.insert_batch(vec![
+            vec![1.0, 2.0, 3.0].into_iter().map(f16::from_f32).collect(),
+            vec![4.0, 5.0, 6.0].into_iter().map(f16::from_f32).collect(),
+        ])?;
+        index.insert(vec![7.0, 8.0, 9.0].into_iter().map(f16::from_f32).collect())?;
         index.build(2)?;
         index.persist()?;
 
@@ -516,7 +551,7 @@ mod tests {
     }
 
     #[test]
-    fn test_multithreaded() -> StdResult<(), Box<dyn StdError>> {
+    fn test_ngt_multithreaded() -> StdResult<(), Box<dyn StdError>> {
         // Get a temporary directory to store the index
         let dir = tempdir()?;
         if cfg!(feature = "shared_mem") {

@@ -14,8 +14,11 @@ fn main() {
     if env::var("CARGO_FEATURE_QUANTIZED").is_err() {
         config.define("NGT_QBG_DISABLED", "ON");
     } else {
-        config.define("NGT_AVX2", "ON");
         config.define("CMAKE_BUILD_TYPE", "Release");
+        if env::var("CARGO_FEATURE_QG_OPTIM").is_ok() {
+            config.define("NGTQG_NO_ROTATION", "ON");
+            config.define("NGTQG_ZERO_GLOBAL", "ON");
+        }
     }
     let dst = config.build();
 

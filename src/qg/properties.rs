@@ -1,6 +1,7 @@
 use std::marker::PhantomData;
 use std::ptr;
 
+use half::f16;
 use ngt_sys as sys;
 use num_enum::TryFromPrimitive;
 use scopeguard::defer;
@@ -12,6 +13,7 @@ use crate::error::{make_err, Result};
 pub enum QgObject {
     Uint8 = 1,
     Float = 2,
+    Float16 = 3,
 }
 
 mod private {
@@ -33,6 +35,13 @@ impl private::Sealed for u8 {}
 impl QgObjectType for u8 {
     fn as_obj() -> QgObject {
         QgObject::Uint8
+    }
+}
+
+impl private::Sealed for f16 {}
+impl QgObjectType for f16 {
+    fn as_obj() -> QgObject {
+        QgObject::Float16
     }
 }
 
@@ -223,12 +232,6 @@ where
         Ok(())
     }
 
-    pub fn object_type(mut self, object_type: QgObject) -> Result<Self> {
-        self.object_type = object_type;
-        unsafe { Self::set_object_type(self.raw_prop, object_type)? };
-        Ok(self)
-    }
-
     unsafe fn set_object_type(raw_prop: sys::NGTProperty, object_type: QgObject) -> Result<()> {
         let ebuf = sys::ngt_create_error_object();
         defer! { sys::ngt_destroy_error_object(ebuf); }
@@ -241,6 +244,11 @@ where
             }
             QgObject::Float => {
                 if !sys::ngt_set_property_object_type_float(raw_prop, ebuf) {
+                    Err(make_err(ebuf))?
+                }
+            }
+            QgObject::Float16 => {
+                if !sys::ngt_set_property_object_type_float16(raw_prop, ebuf) {
                     Err(make_err(ebuf))?
                 }
             }
