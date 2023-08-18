@@ -17,7 +17,6 @@ jobs:
       matrix:
         os: [ubuntu-latest]
         feature:
-          - default
           - shared_mem
           - large_data
           - quantized

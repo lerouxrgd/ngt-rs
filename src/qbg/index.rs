@@ -31,12 +31,6 @@ where
     where
         P: AsRef<Path>,
     {
-        if !is_x86_feature_detected!("avx2") {
-            return Err(Error(
-                "Cannot quantize an index without AVX2 support".into(),
-            ));
-        }
-
         unsafe {
             let ebuf = sys::ngt_create_error_object();
             defer! { sys::ngt_destroy_error_object(ebuf); }
@@ -132,12 +126,6 @@ where
     T: QbgObjectType,
 {
     pub fn open<P: AsRef<Path>>(path: P) -> Result<Self> {
-        if !is_x86_feature_detected!("avx2") {
-            return Err(Error(
-                "Cannot use a quantized index without AVX2 support".into(),
-            ));
-        }
-
         if !path.as_ref().exists() {
             Err(Error(format!("Path {:?} does not exist", path.as_ref())))?
         }
@@ -270,7 +258,7 @@ where
                         Err(make_err(self.ebuf))?
                     }
                     let results = Vec::from_raw_parts(
-                        results as *mut f32,
+                        results,
                         self.dimension as usize,
                         self.dimension as usize,
                     );
@@ -282,7 +270,7 @@ where
                         Err(make_err(self.ebuf))?
                     }
                     let results = Vec::from_raw_parts(
-                        results as *mut u8,
+                        results,
                         self.dimension as usize,
                         self.dimension as usize,
                     );

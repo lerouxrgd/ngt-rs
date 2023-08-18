@@ -321,7 +321,7 @@ where
                     }
 
                     let results = Vec::from_raw_parts(
-                        results as *mut f32,
+                        results,
                         self.prop.dimension as usize,
                         self.prop.dimension as usize,
                     );
@@ -353,7 +353,7 @@ where
                     }
 
                     let results = Vec::from_raw_parts(
-                        results as *mut u8,
+                        results,
                         self.prop.dimension as usize,
                         self.prop.dimension as usize,
                     );

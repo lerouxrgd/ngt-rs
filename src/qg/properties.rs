@@ -7,6 +7,8 @@ use num_enum::TryFromPrimitive;
 use scopeguard::defer;
 
 use crate::error::{make_err, Result};
+use crate::ngt::NgtObjectType;
+use crate::{NgtDistance, NgtProperties};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, TryFromPrimitive)]
 #[repr(i32)]
@@ -50,6 +52,27 @@ impl QgObjectType for f16 {
 pub enum QgDistance {
     L2 = 1,
     Cosine = 4,
+}
+
+impl From<QgDistance> for NgtDistance {
+    fn from(d: QgDistance) -> Self {
+        match d {
+            QgDistance::L2 => NgtDistance::L2,
+            QgDistance::Cosine => NgtDistance::Cosine,
+        }
+    }
+}
+
+impl TryFrom<NgtDistance> for QgDistance {
+    type Error = crate::Error;
+
+    fn try_from(d: NgtDistance) -> Result<Self> {
+        match d {
+            NgtDistance::L2 => Ok(QgDistance::L2),
+            NgtDistance::Cosine => Ok(QgDistance::Cosine),
+            _ => Err(format!("Invalid distance {d:?} isn't supported for QG").into()),
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -293,6 +316,21 @@ impl<T> Drop for QgProperties<T> {
             unsafe { sys::ngt_destroy_property(self.raw_prop) };
             self.raw_prop = ptr::null_mut();
         }
+    }
+}
+
+impl<T> TryFrom<QgProperties<T>> for NgtProperties<T>
+where
+    T: QgObjectType,
+    T: NgtObjectType,
+{
+    type Error = crate::Error;
+
+    fn try_from(prop: QgProperties<T>) -> Result<Self> {
+        NgtProperties::dimension(prop.dimension as usize)?
+            .creation_edge_size(prop.creation_edge_size as usize)?
+            .search_edge_size(prop.search_edge_size as usize)?
+            .distance_type(prop.distance_type.into())
     }
 }
 

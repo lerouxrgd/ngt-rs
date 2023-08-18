@@ -1,3 +1,7 @@
+#![cfg_attr(feature = "shared_mem", allow(unused_imports))]
+
+//! Functions aimed at optimizing [`NgtIndex`](NgtIndex)
+
 use std::ffi::CString;
 use std::os::unix::ffi::OsStrExt;
 use std::path::Path;
@@ -92,7 +96,7 @@ pub fn refine_anng<T: NgtObjectType>(
 /// [`optimize_anng_edges_number`](optimize_anng_edges_number).
 ///
 /// If more performance is needed, a larger `creation_edge_size` can be set through
-/// [`Properties`](crate::Properties::creation_edge_size) at ANNG index
+/// [`Properties`](crate::NgtProperties::creation_edge_size) at ANNG index
 /// [`create`](NgtIndex::create) time.
 ///
 /// Important [`GraphOptimParams`](GraphOptimParams) parameters are `nb_outgoing` edges

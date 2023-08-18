@@ -11,6 +11,7 @@ use scopeguard::defer;
 use super::{QgObject, QgObjectType, QgProperties, QgQuantizationParams};
 use crate::error::{make_err, Error, Result};
 use crate::ngt::NgtIndex;
+use crate::qg::QgDistance;
 use crate::{SearchResult, VecId};
 
 #[derive(Debug)]
@@ -26,12 +27,7 @@ where
 {
     /// Quantize an NGT index
     pub fn quantize(index: NgtIndex<T>, params: QgQuantizationParams) -> Result<Self> {
-        //
-        if !is_x86_feature_detected!("avx2") {
-            return Err(Error(
-                "Cannot quantize an index without AVX2 support".into(),
-            ));
-        }
+        QgDistance::try_from(index.prop.distance_type)?;
 
         unsafe {
             let ebuf = sys::ngt_create_error_object();
@@ -49,12 +45,6 @@ where
 
     /// Open the already existing quantized index at the specified path.
     pub fn open<P: AsRef<Path>>(path: P) -> Result<Self> {
-        if !is_x86_feature_detected!("avx2") {
-            return Err(Error(
-                "Cannot use a quantized index without AVX2 support".into(),
-            ));
-        }
-
         if !path.as_ref().exists() {
             Err(Error(format!("Path {:?} does not exist", path.as_ref())))?
         }
@@ -153,7 +143,7 @@ where
                     }
 
                     let results = Vec::from_raw_parts(
-                        results as *mut f32,
+                        results,
                         self.prop.dimension as usize,
                         self.prop.dimension as usize,
                     );
@@ -174,7 +164,7 @@ where
                     }
 
                     let results = Vec::from_raw_parts(
-                        results as *mut u8,
+                        results,
                         self.prop.dimension as usize,
                         self.prop.dimension as usize,
                     );
@@ -283,8 +273,9 @@ mod tests {
 
     use tempfile::tempdir;
 
+    use crate::qg::QgDistance;
+
     use super::*;
-    use crate::{NgtDistance, NgtProperties};
 
     #[test]
     fn test_qg_f32() -> StdResult<(), Box<dyn StdError>> {
@@ -293,8 +284,8 @@ mod tests {
 
         // Create an NGT index for vectors
         let ndims = 3;
-        let props = NgtProperties::<f32>::dimension(ndims)?.distance_type(NgtDistance::L2)?;
-        let mut index = NgtIndex::create(dir.path(), props)?;
+        let props = QgProperties::<f32>::dimension(ndims)?.distance_type(QgDistance::L2)?;
+        let mut index = NgtIndex::create(dir.path(), props.try_into()?)?;
 
         // Insert vectors and get their ids
         let nvecs = 64;
@@ -339,8 +330,8 @@ mod tests {
 
         // Create an NGT index for vectors
         let ndims = 3;
-        let props = NgtProperties::<f16>::dimension(ndims)?.distance_type(NgtDistance::L2)?;
-        let mut index = NgtIndex::create(dir.path(), props)?;
+        let props = QgProperties::<f16>::dimension(ndims)?.distance_type(QgDistance::L2)?;
+        let mut index = NgtIndex::create(dir.path(), props.try_into()?)?;
 
         // Insert vectors and get their ids
         let nvecs = 64;
@@ -388,8 +379,8 @@ mod tests {
 
         // Create an NGT index for vectors
         let ndims = 3;
-        let props = NgtProperties::<u8>::dimension(ndims)?.distance_type(NgtDistance::L2)?;
-        let mut index = NgtIndex::create(dir.path(), props)?;
+        let props = QgProperties::<u8>::dimension(ndims)?.distance_type(QgDistance::L2)?;
+        let mut index = NgtIndex::create(dir.path(), props.try_into()?)?;
 
         // Insert vectors and get their ids
         let nvecs = 64;
