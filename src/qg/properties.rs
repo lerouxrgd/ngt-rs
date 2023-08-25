@@ -1,56 +1,104 @@
-use std::convert::TryFrom;
+use std::marker::PhantomData;
 use std::ptr;
 
+use half::f16;
 use ngt_sys as sys;
 use num_enum::TryFromPrimitive;
 use scopeguard::defer;
 
 use crate::error::{make_err, Result};
+use crate::ngt::NgtObjectType;
+use crate::{NgtDistance, NgtProperties};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, TryFromPrimitive)]
 #[repr(i32)]
-pub enum ObjectType {
+pub enum QgObject {
     Uint8 = 1,
     Float = 2,
+    Float16 = 3,
+}
+
+mod private {
+    pub trait Sealed {}
+}
+
+pub trait QgObjectType: private::Sealed {
+    fn as_obj() -> QgObject;
+}
+
+impl private::Sealed for f32 {}
+impl QgObjectType for f32 {
+    fn as_obj() -> QgObject {
+        QgObject::Float
+    }
+}
+
+impl private::Sealed for u8 {}
+impl QgObjectType for u8 {
+    fn as_obj() -> QgObject {
+        QgObject::Uint8
+    }
+}
+
+impl private::Sealed for f16 {}
+impl QgObjectType for f16 {
+    fn as_obj() -> QgObject {
+        QgObject::Float16
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, TryFromPrimitive)]
 #[repr(i32)]
-pub enum DistanceType {
-    L1 = 0,
+pub enum QgDistance {
     L2 = 1,
-    Angle = 2,
-    Hamming = 3,
     Cosine = 4,
-    NormalizedAngle = 5,
-    NormalizedCosine = 6,
-    Jaccard = 7,
-    SparseJaccard = 8,
-    NormalizedL2 = 9,
-    Poincare = 100,
-    Lorentz = 101,
+}
+
+impl From<QgDistance> for NgtDistance {
+    fn from(d: QgDistance) -> Self {
+        match d {
+            QgDistance::L2 => NgtDistance::L2,
+            QgDistance::Cosine => NgtDistance::Cosine,
+        }
+    }
+}
+
+impl TryFrom<NgtDistance> for QgDistance {
+    type Error = crate::Error;
+
+    fn try_from(d: NgtDistance) -> Result<Self> {
+        match d {
+            NgtDistance::L2 => Ok(QgDistance::L2),
+            NgtDistance::Cosine => Ok(QgDistance::Cosine),
+            _ => Err(format!("Invalid distance {d:?} isn't supported for QG").into()),
+        }
+    }
 }
 
 #[derive(Debug)]
-pub struct Properties {
+pub struct QgProperties<T> {
     pub(crate) dimension: i32,
     pub(crate) creation_edge_size: i16,
     pub(crate) search_edge_size: i16,
-    pub(crate) object_type: ObjectType,
-    pub(crate) distance_type: DistanceType,
+    pub(crate) object_type: QgObject,
+    pub(crate) distance_type: QgDistance,
     pub(crate) raw_prop: sys::NGTProperty,
+    _marker: PhantomData<T>,
 }
 
-unsafe impl Send for Properties {}
-unsafe impl Sync for Properties {}
+unsafe impl<T> Send for QgProperties<T> {}
+unsafe impl<T> Sync for QgProperties<T> {}
 
-impl Properties {
+impl<T> QgProperties<T>
+where
+    T: QgObjectType,
+{
     pub fn dimension(dimension: usize) -> Result<Self> {
         let dimension = i32::try_from(dimension)?;
         let creation_edge_size = 10;
         let search_edge_size = 40;
-        let object_type = ObjectType::Float;
-        let distance_type = DistanceType::L2;
+        let object_type = T::as_obj();
+        let distance_type = QgDistance::L2;
 
         unsafe {
             let ebuf = sys::ngt_create_error_object();
@@ -74,6 +122,7 @@ impl Properties {
                 object_type,
                 distance_type,
                 raw_prop,
+                _marker: PhantomData,
             })
         }
     }
@@ -101,6 +150,7 @@ impl Properties {
                 object_type: self.object_type,
                 distance_type: self.distance_type,
                 raw_prop,
+                _marker: PhantomData,
             })
         }
     }
@@ -138,13 +188,13 @@ impl Properties {
             if object_type < 0 {
                 Err(make_err(ebuf))?
             }
-            let object_type = ObjectType::try_from(object_type)?;
+            let object_type = QgObject::try_from(object_type)?;
 
             let distance_type = sys::ngt_get_property_distance_type(raw_prop, ebuf);
             if distance_type < 0 {
                 Err(make_err(ebuf))?
             }
-            let distance_type = DistanceType::try_from(distance_type)?;
+            let distance_type = QgDistance::try_from(distance_type)?;
 
             Ok(Self {
                 dimension,
@@ -153,6 +203,7 @@ impl Properties {
                 object_type,
                 distance_type,
                 raw_prop,
+                _marker: PhantomData,
             })
         }
     }
@@ -204,24 +255,23 @@ impl Properties {
         Ok(())
     }
 
-    pub fn object_type(mut self, object_type: ObjectType) -> Result<Self> {
-        self.object_type = object_type;
-        unsafe { Self::set_object_type(self.raw_prop, object_type)? };
-        Ok(self)
-    }
-
-    unsafe fn set_object_type(raw_prop: sys::NGTProperty, object_type: ObjectType) -> Result<()> {
+    unsafe fn set_object_type(raw_prop: sys::NGTProperty, object_type: QgObject) -> Result<()> {
         let ebuf = sys::ngt_create_error_object();
         defer! { sys::ngt_destroy_error_object(ebuf); }
 
         match object_type {
-            ObjectType::Uint8 => {
+            QgObject::Uint8 => {
                 if !sys::ngt_set_property_object_type_integer(raw_prop, ebuf) {
                     Err(make_err(ebuf))?
                 }
             }
-            ObjectType::Float => {
+            QgObject::Float => {
                 if !sys::ngt_set_property_object_type_float(raw_prop, ebuf) {
+                    Err(make_err(ebuf))?
+                }
+            }
+            QgObject::Float16 => {
+                if !sys::ngt_set_property_object_type_float16(raw_prop, ebuf) {
                     Err(make_err(ebuf))?
                 }
             }
@@ -230,7 +280,7 @@ impl Properties {
         Ok(())
     }
 
-    pub fn distance_type(mut self, distance_type: DistanceType) -> Result<Self> {
+    pub fn distance_type(mut self, distance_type: QgDistance) -> Result<Self> {
         self.distance_type = distance_type;
         unsafe { Self::set_distance_type(self.raw_prop, distance_type)? };
         Ok(self)
@@ -238,69 +288,19 @@ impl Properties {
 
     unsafe fn set_distance_type(
         raw_prop: sys::NGTProperty,
-        distance_type: DistanceType,
+        distance_type: QgDistance,
     ) -> Result<()> {
         let ebuf = sys::ngt_create_error_object();
         defer! { sys::ngt_destroy_error_object(ebuf); }
 
         match distance_type {
-            DistanceType::L1 => {
-                if !sys::ngt_set_property_distance_type_l1(raw_prop, ebuf) {
-                    Err(make_err(ebuf))?
-                }
-            }
-            DistanceType::L2 => {
+            QgDistance::L2 => {
                 if !sys::ngt_set_property_distance_type_l2(raw_prop, ebuf) {
                     Err(make_err(ebuf))?
                 }
             }
-            DistanceType::Angle => {
-                if !sys::ngt_set_property_distance_type_angle(raw_prop, ebuf) {
-                    Err(make_err(ebuf))?
-                }
-            }
-            DistanceType::Hamming => {
-                if !sys::ngt_set_property_distance_type_hamming(raw_prop, ebuf) {
-                    Err(make_err(ebuf))?
-                }
-            }
-            DistanceType::Cosine => {
+            QgDistance::Cosine => {
                 if !sys::ngt_set_property_distance_type_cosine(raw_prop, ebuf) {
-                    Err(make_err(ebuf))?
-                }
-            }
-            DistanceType::NormalizedAngle => {
-                if !sys::ngt_set_property_distance_type_normalized_angle(raw_prop, ebuf) {
-                    Err(make_err(ebuf))?
-                }
-            }
-            DistanceType::NormalizedCosine => {
-                if !sys::ngt_set_property_distance_type_normalized_cosine(raw_prop, ebuf) {
-                    Err(make_err(ebuf))?
-                }
-            }
-            DistanceType::Jaccard => {
-                if !sys::ngt_set_property_distance_type_jaccard(raw_prop, ebuf) {
-                    Err(make_err(ebuf))?
-                }
-            }
-            DistanceType::SparseJaccard => {
-                if !sys::ngt_set_property_distance_type_sparse_jaccard(raw_prop, ebuf) {
-                    Err(make_err(ebuf))?
-                }
-            }
-            DistanceType::NormalizedL2 => {
-                if !sys::ngt_set_property_distance_type_normalized_l2(raw_prop, ebuf) {
-                    Err(make_err(ebuf))?
-                }
-            }
-            DistanceType::Poincare => {
-                if !sys::ngt_set_property_distance_type_poincare(raw_prop, ebuf) {
-                    Err(make_err(ebuf))?
-                }
-            }
-            DistanceType::Lorentz => {
-                if !sys::ngt_set_property_distance_type_lorentz(raw_prop, ebuf) {
                     Err(make_err(ebuf))?
                 }
             }
@@ -310,11 +310,50 @@ impl Properties {
     }
 }
 
-impl Drop for Properties {
+impl<T> Drop for QgProperties<T> {
     fn drop(&mut self) {
         if !self.raw_prop.is_null() {
             unsafe { sys::ngt_destroy_property(self.raw_prop) };
             self.raw_prop = ptr::null_mut();
+        }
+    }
+}
+
+impl<T> TryFrom<QgProperties<T>> for NgtProperties<T>
+where
+    T: QgObjectType,
+    T: NgtObjectType,
+{
+    type Error = crate::Error;
+
+    fn try_from(prop: QgProperties<T>) -> Result<Self> {
+        NgtProperties::dimension(prop.dimension as usize)?
+            .creation_edge_size(prop.creation_edge_size as usize)?
+            .search_edge_size(prop.search_edge_size as usize)?
+            .distance_type(prop.distance_type.into())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct QgQuantizationParams {
+    pub dimension_of_subvector: f32,
+    pub max_number_of_edges: u64,
+}
+
+impl Default for QgQuantizationParams {
+    fn default() -> Self {
+        Self {
+            dimension_of_subvector: 0.0,
+            max_number_of_edges: 128,
+        }
+    }
+}
+
+impl QgQuantizationParams {
+    pub(crate) fn into_raw(self) -> sys::NGTQGQuantizationParameters {
+        sys::NGTQGQuantizationParameters {
+            dimension_of_subvector: self.dimension_of_subvector,
+            max_number_of_edges: self.max_number_of_edges,
         }
     }
 }

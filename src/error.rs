@@ -3,8 +3,6 @@ use std::fmt;
 
 use ngt_sys as sys;
 
-use crate::properties::{DistanceType, ObjectType};
-
 pub type Result<T> = std::result::Result<T, Error>;
 
 #[derive(Debug)]
@@ -25,6 +23,12 @@ pub(crate) fn make_err(err: sys::NGTError) -> Error {
     Error(err_msg)
 }
 
+impl From<String> for Error {
+    fn from(err: String) -> Self {
+        Self(err)
+    }
+}
+
 impl From<std::io::Error> for Error {
     fn from(source: std::io::Error) -> Self {
         Self(source.to_string())
@@ -43,14 +47,48 @@ impl From<std::ffi::NulError> for Error {
     }
 }
 
-impl From<num_enum::TryFromPrimitiveError<ObjectType>> for Error {
-    fn from(source: num_enum::TryFromPrimitiveError<ObjectType>) -> Self {
+impl From<std::ffi::IntoStringError> for Error {
+    fn from(source: std::ffi::IntoStringError) -> Self {
         Self(source.to_string())
     }
 }
 
-impl From<num_enum::TryFromPrimitiveError<DistanceType>> for Error {
-    fn from(source: num_enum::TryFromPrimitiveError<DistanceType>) -> Self {
+impl From<num_enum::TryFromPrimitiveError<crate::NgtObject>> for Error {
+    fn from(source: num_enum::TryFromPrimitiveError<crate::NgtObject>) -> Self {
+        Self(source.to_string())
+    }
+}
+
+impl From<num_enum::TryFromPrimitiveError<crate::NgtDistance>> for Error {
+    fn from(source: num_enum::TryFromPrimitiveError<crate::NgtDistance>) -> Self {
+        Self(source.to_string())
+    }
+}
+
+#[cfg(feature = "quantized")]
+impl From<num_enum::TryFromPrimitiveError<crate::qg::QgObject>> for Error {
+    fn from(source: num_enum::TryFromPrimitiveError<crate::qg::QgObject>) -> Self {
+        Self(source.to_string())
+    }
+}
+
+#[cfg(feature = "quantized")]
+impl From<num_enum::TryFromPrimitiveError<crate::qg::QgDistance>> for Error {
+    fn from(source: num_enum::TryFromPrimitiveError<crate::qg::QgDistance>) -> Self {
+        Self(source.to_string())
+    }
+}
+
+#[cfg(feature = "quantized")]
+impl From<num_enum::TryFromPrimitiveError<crate::qbg::QbgObject>> for Error {
+    fn from(source: num_enum::TryFromPrimitiveError<crate::qbg::QbgObject>) -> Self {
+        Self(source.to_string())
+    }
+}
+
+#[cfg(feature = "quantized")]
+impl From<num_enum::TryFromPrimitiveError<crate::qbg::QbgDistance>> for Error {
+    fn from(source: num_enum::TryFromPrimitiveError<crate::qbg::QbgDistance>) -> Self {
         Self(source.to_string())
     }
 }

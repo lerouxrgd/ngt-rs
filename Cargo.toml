@@ -1,6 +1,6 @@
 [package]
 name = "ngt"
-version = "0.4.5"
+version = "0.5.0"
 authors = ["Romain Leroux <romain@leroux.dev>"]
 edition = "2021"
 description = "Rust wrappers for NGT nearest neighbor search."
@@ -11,17 +11,23 @@ license = "Apache-2.0"
 readme = "README.md"
 
 [dependencies]
-ngt-sys = { path = "ngt-sys", version = "1.14.8-static" }
-num_enum = "0.5"
-openmp-sys = { version="1.2.3", features=["static"] }
+half = "2"
+ngt-sys = { path = "ngt-sys", version = "2.1.2" }
+num_enum = "0.7"
 scopeguard = "1"
 
 [dev-dependencies]
+rand = "0.8"
 rayon = "1"
 tempfile = "3"
 
 [features]
-default = []
 static = ["ngt-sys/static"]
 shared_mem = ["ngt-sys/shared_mem"]
 large_data = ["ngt-sys/large_data"]
+quantized = ["ngt-sys/quantized"]
+qg_optim = ["quantized", "ngt-sys/qg_optim"]
+
+[package.metadata.docs.rs]
+features = ["quantized"]
+rustdoc-args = ["--cfg", "docsrs"]

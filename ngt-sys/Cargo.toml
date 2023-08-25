@@ -1,6 +1,6 @@
 [package]
 name = "ngt-sys"
-version = "1.14.8-static"
+version = "2.1.2"
 authors = ["Romain Leroux <romain@leroux.dev>"]
 edition = "2021"
 links = "ngt"
@@ -19,3 +19,5 @@ cpp_build = { version = "0.5", optional = true }
 static = ["dep:cpp_build"]
 shared_mem = []
 large_data = []
+quantized = []
+qg_optim = []
