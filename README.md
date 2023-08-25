@@ -52,4 +52,4 @@ available through the Cargo features `shared_mem` and `large_data` respectively.
 [f16]: https://docs.rs/half/latest/half/struct.f16.html
 [index-ngt]: https://docs.rs/ngt/latest/ngt/#usage
 [index-qg]: https://docs.rs/ngt/latest/ngt/qg/
-[index-qbg]: https://docs.rs/ngt/latest/ngt/qgb/
+[index-qbg]: https://docs.rs/ngt/latest/ngt/qbg/

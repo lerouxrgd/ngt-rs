@@ -13,7 +13,7 @@
 //! let params = QbgConstructParams::<f32>::dimension(3)
 //!     .extended_dimension(16)? // next multiple of 16 after 3
 //!     .number_of_subvectors(1)
-//!     .number_of_subvectors(0)
+//!     .number_of_blobs(0)
 //!     .distance_type(QbgDistance::L2);
 //!
 //! # Ok(())
