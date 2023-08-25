@@ -28,7 +28,7 @@
 //!
 //! ```rust
 //! # fn main() -> Result<(), ngt::Error> {
-//! use ngt::{NgtIndex, NgtProperties};
+//! use ngt::{NgtIndex, NgtProperties, NgtQuery};
 //!
 //! // Create a new index
 //! let prop = NgtProperties::dimension(3)?;
@@ -57,8 +57,9 @@
 //! let res = index.get_vec(id1);
 //! assert!(res.is_err());
 //!
-//! // Verify that now our search result is different
-//! let res = index.search(&vec![1.1, 2.1, 3.1], 1, ngt::EPSILON)?;
+//! // Verify that now our search result is different (using the NgtQuery API)
+//! let query = vec![1.1, 2.1, 3.1];
+//! let res = index.search_query(NgtQuery::new(&query))?;
 //! assert_eq!(res[0].id, id2);
 //! assert_eq!(index.get_vec(id2)?, vec![4.0, 5.0, 6.0]);
 //!
@@ -91,6 +92,6 @@ pub struct SearchResult {
 pub const EPSILON: f32 = 0.1;
 
 pub use crate::error::{Error, Result};
-pub use crate::ngt::{optim, NgtDistance, NgtIndex, NgtObject, NgtProperties};
+pub use crate::ngt::{optim, NgtDistance, NgtIndex, NgtObject, NgtProperties, NgtQuery};
 
 pub use half;

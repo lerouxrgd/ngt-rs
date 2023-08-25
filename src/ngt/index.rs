@@ -108,7 +108,7 @@ where
     /// Search the nearest vectors to the specified query vector.
     ///
     /// **The index must have been [`built`](NgtIndex::build) beforehand**.
-    pub fn search(&self, vec: &[f32], res_size: u64, epsilon: f32) -> Result<Vec<SearchResult>> {
+    pub fn search(&self, vec: &[T], res_size: u64, epsilon: f32) -> Result<Vec<SearchResult>> {
         unsafe {
             let results = sys::ngt_create_empty_results(self.ebuf);
             if results.is_null() {
@@ -116,17 +116,49 @@ where
             }
             defer! { sys::ngt_destroy_results(results); }
 
-            if !sys::ngt_search_index_as_float(
-                self.index,
-                vec.as_ptr() as *mut f32,
-                self.prop.dimension,
-                res_size,
-                epsilon,
-                -1.0,
-                results,
-                self.ebuf,
-            ) {
-                Err(make_err(self.ebuf))?
+            match T::as_obj() {
+                NgtObject::Float => {
+                    if !sys::ngt_search_index_as_float(
+                        self.index,
+                        vec.as_ptr() as *mut f32,
+                        self.prop.dimension,
+                        res_size,
+                        epsilon,
+                        -1.0,
+                        results,
+                        self.ebuf,
+                    ) {
+                        Err(make_err(self.ebuf))?
+                    }
+                }
+                NgtObject::Uint8 => {
+                    if !sys::ngt_search_index_as_uint8(
+                        self.index,
+                        vec.as_ptr() as *mut u8,
+                        self.prop.dimension,
+                        res_size,
+                        epsilon,
+                        -1.0,
+                        results,
+                        self.ebuf,
+                    ) {
+                        Err(make_err(self.ebuf))?
+                    }
+                }
+                NgtObject::Float16 => {
+                    if !sys::ngt_search_index_as_float16(
+                        self.index,
+                        vec.as_ptr() as *mut _,
+                        self.prop.dimension,
+                        res_size,
+                        epsilon,
+                        -1.0,
+                        results,
+                        self.ebuf,
+                    ) {
+                        Err(make_err(self.ebuf))?
+                    }
+                }
             }
 
             let rsize = sys::ngt_get_result_size(results, self.ebuf);
@@ -148,10 +180,10 @@ where
         }
     }
 
-    /// Search linearly the nearest vectors to the specified query vector.
+    /// Search the nearest vectors to the specified [`NgtQuery`]().
     ///
     /// **The index must have been [`built`](NgtIndex::build) beforehand**.
-    pub fn linear_search(&self, vec: &[f32], res_size: u64) -> Result<Vec<SearchResult>> {
+    pub fn search_query(&self, query: NgtQuery<T>) -> Result<Vec<SearchResult>> {
         unsafe {
             let results = sys::ngt_create_empty_results(self.ebuf);
             if results.is_null() {
@@ -159,15 +191,35 @@ where
             }
             defer! { sys::ngt_destroy_results(results); }
 
-            if !sys::ngt_linear_search_index_as_float(
-                self.index,
-                vec.as_ptr() as *mut f32,
-                self.prop.dimension,
-                res_size,
-                results,
-                self.ebuf,
-            ) {
-                Err(make_err(self.ebuf))?
+            match T::as_obj() {
+                NgtObject::Float => {
+                    let q = sys::NGTQueryFloat {
+                        query: query.query.as_ptr() as *mut f32,
+                        params: query.params(),
+                    };
+                    if !sys::ngt_search_index_with_query_float(self.index, q, results, self.ebuf) {
+                        Err(make_err(self.ebuf))?
+                    }
+                }
+                NgtObject::Uint8 => {
+                    let q = sys::NGTQueryUint8 {
+                        query: query.query.as_ptr() as *mut u8,
+                        params: query.params(),
+                    };
+                    if !sys::ngt_search_index_with_query_uint8(self.index, q, results, self.ebuf) {
+                        Err(make_err(self.ebuf))?
+                    }
+                }
+                NgtObject::Float16 => {
+                    let q = sys::NGTQueryFloat16 {
+                        query: query.query.as_ptr() as *mut _,
+                        params: query.params(),
+                    };
+                    if !sys::ngt_search_index_with_query_float16(self.index, q, results, self.ebuf)
+                    {
+                        Err(make_err(self.ebuf))?
+                    }
+                }
             }
 
             let rsize = sys::ngt_get_result_size(results, self.ebuf);
@@ -390,6 +442,59 @@ impl<T> Drop for NgtIndex<T> {
     }
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct NgtQuery<'a, T> {
+    query: &'a [T],
+    pub size: u64,
+    pub epsilon: f32,
+    pub edge_size: u64,
+    pub radius: f32,
+}
+
+impl<'a, T> NgtQuery<'a, T>
+where
+    T: NgtObjectType,
+{
+    pub fn new(query: &'a [T]) -> Self {
+        Self {
+            query,
+            size: 10,
+            epsilon: crate::EPSILON,
+            edge_size: u64::MIN,
+            radius: -1.,
+        }
+    }
+
+    pub fn size(mut self, size: u64) -> Self {
+        self.size = size;
+        self
+    }
+
+    pub fn epsilon(mut self, epsilon: f32) -> Self {
+        self.epsilon = epsilon;
+        self
+    }
+
+    pub fn edge_size(mut self, edge_size: u64) -> Self {
+        self.edge_size = edge_size;
+        self
+    }
+
+    pub fn radius(mut self, radius: f32) -> Self {
+        self.radius = radius;
+        self
+    }
+
+    unsafe fn params(&self) -> sys::NGTQueryParameters {
+        sys::NGTQueryParameters {
+            size: self.size,
+            epsilon: self.epsilon,
+            edge_size: self.edge_size,
+            radius: self.radius,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::error::Error as StdError;
@@ -429,13 +534,9 @@ mod tests {
         assert!(index.nb_inserted() == 2);
         assert!(index.nb_indexed() == 2);
 
-        // Perform a vector search (with 1 result)
-        let res = index.search(&vec![1.1, 2.1, 3.1], 1, EPSILON)?;
-        assert_eq!(id1, res[0].id);
-        assert_eq!(vec1, index.get_vec(id1)?);
-
-        // Perform a linear vector search (with 1 result)
-        let res = index.linear_search(&vec![1.1, 2.1, 3.1], 1)?;
+        // Perform a vector search (using the NgtQuery API)
+        let query = vec![1.1, 2.1, 3.1];
+        let res = index.search_query(NgtQuery::new(&query))?;
         assert_eq!(id1, res[0].id);
         assert_eq!(vec1, index.get_vec(id1)?);
 
@@ -514,7 +615,7 @@ mod tests {
         index.persist()?;
 
         // Verify that the index was built correctly with a vector search
-        let res = index.search(&vec![1.1, 2.1, 3.1], 1, EPSILON)?;
+        let res = index.search(&vec![1, 2, 3], 1, EPSILON)?;
         assert_eq!(1, res[0].id);
 
         dir.close()?;
@@ -543,7 +644,14 @@ mod tests {
         index.persist()?;
 
         // Verify that the index was built correctly with a vector search
-        let res = index.search(&vec![1.1, 2.1, 3.1], 1, EPSILON)?;
+        let res = index.search(
+            &vec![1.1, 2.1, 3.1]
+                .into_iter()
+                .map(f16::from_f32)
+                .collect::<Vec<_>>(),
+            1,
+            EPSILON,
+        )?;
         assert_eq!(1, res[0].id);
 
         dir.close()?;
