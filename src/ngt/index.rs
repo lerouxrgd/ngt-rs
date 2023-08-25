@@ -108,7 +108,7 @@ where
     /// Search the nearest vectors to the specified query vector.
     ///
     /// **The index must have been [`built`](NgtIndex::build) beforehand**.
-    pub fn search(&self, vec: &[T], res_size: u64, epsilon: f32) -> Result<Vec<SearchResult>> {
+    pub fn search(&self, vec: &[T], res_size: usize, epsilon: f32) -> Result<Vec<SearchResult>> {
         unsafe {
             let results = sys::ngt_create_empty_results(self.ebuf);
             if results.is_null() {
@@ -122,7 +122,7 @@ where
                         self.index,
                         vec.as_ptr() as *mut f32,
                         self.prop.dimension,
-                        res_size,
+                        res_size as u64,
                         epsilon,
                         -1.0,
                         results,
@@ -136,7 +136,7 @@ where
                         self.index,
                         vec.as_ptr() as *mut u8,
                         self.prop.dimension,
-                        res_size,
+                        res_size as u64,
                         epsilon,
                         -1.0,
                         results,
@@ -150,7 +150,7 @@ where
                         self.index,
                         vec.as_ptr() as *mut _,
                         self.prop.dimension,
-                        res_size,
+                        res_size as u64,
                         epsilon,
                         -1.0,
                         results,
@@ -333,9 +333,9 @@ where
     }
 
     /// Build the index for the vectors that have been inserted so far.
-    pub fn build(&mut self, num_threads: u32) -> Result<()> {
+    pub fn build(&mut self, num_threads: usize) -> Result<()> {
         unsafe {
-            if !sys::ngt_create_index(self.index, num_threads, self.ebuf) {
+            if !sys::ngt_create_index(self.index, num_threads as u32, self.ebuf) {
                 Err(make_err(self.ebuf))?
             }
             Ok(())
@@ -419,13 +419,13 @@ where
     }
 
     /// The number of vectors inserted (but not necessarily indexed).
-    pub fn nb_inserted(&self) -> u32 {
-        unsafe { sys::ngt_get_number_of_objects(self.index, self.ebuf) }
+    pub fn nb_inserted(&self) -> usize {
+        unsafe { sys::ngt_get_number_of_objects(self.index, self.ebuf) as usize }
     }
 
     /// The number of indexed vectors, available after [`build`](NgtIndex::build).
-    pub fn nb_indexed(&self) -> u32 {
-        unsafe { sys::ngt_get_number_of_indexed_objects(self.index, self.ebuf) }
+    pub fn nb_indexed(&self) -> usize {
+        unsafe { sys::ngt_get_number_of_indexed_objects(self.index, self.ebuf) as usize }
     }
 }
 
@@ -465,8 +465,8 @@ where
         }
     }
 
-    pub fn size(mut self, size: u64) -> Self {
-        self.size = size;
+    pub fn size(mut self, size: usize) -> Self {
+        self.size = size as u64;
         self
     }
 
@@ -475,8 +475,8 @@ where
         self
     }
 
-    pub fn edge_size(mut self, edge_size: u64) -> Self {
-        self.edge_size = edge_size;
+    pub fn edge_size(mut self, edge_size: usize) -> Self {
+        self.edge_size = edge_size as u64;
         self
     }
 

@@ -65,8 +65,8 @@ impl<T> QbgConstructParams<T>
 where
     T: QbgObjectType,
 {
-    pub fn dimension(dimension: u64) -> Self {
-        let extended_dimension = next_multiple_of_16(dimension);
+    pub fn dimension(dimension: usize) -> Self {
+        let extended_dimension = next_multiple_of_16(dimension) as u64;
         let number_of_subvectors = 1;
         let number_of_blobs = 0;
         let internal_data_type = T::as_obj();
@@ -75,7 +75,7 @@ where
 
         Self {
             extended_dimension,
-            dimension,
+            dimension: dimension as u64,
             number_of_subvectors,
             number_of_blobs,
             internal_data_type,
@@ -85,9 +85,9 @@ where
         }
     }
 
-    pub fn extended_dimension(mut self, extended_dimension: u64) -> Result<Self, Error> {
-        if extended_dimension % 16 == 0 && extended_dimension >= self.dimension {
-            self.extended_dimension = extended_dimension;
+    pub fn extended_dimension(mut self, extended_dimension: usize) -> Result<Self, Error> {
+        if extended_dimension % 16 == 0 && extended_dimension as u64 >= self.dimension {
+            self.extended_dimension = extended_dimension as u64;
             Ok(self)
         } else {
             Err(Error(format!(
@@ -97,13 +97,13 @@ where
         }
     }
 
-    pub fn number_of_subvectors(mut self, number_of_subvectors: u64) -> Self {
-        self.number_of_subvectors = number_of_subvectors;
+    pub fn number_of_subvectors(mut self, number_of_subvectors: usize) -> Self {
+        self.number_of_subvectors = number_of_subvectors as u64;
         self
     }
 
-    pub fn number_of_blobs(mut self, number_of_blobs: u64) -> Self {
-        self.number_of_blobs = number_of_blobs;
+    pub fn number_of_blobs(mut self, number_of_blobs: usize) -> Self {
+        self.number_of_blobs = number_of_blobs as u64;
         self
     }
 
@@ -130,7 +130,7 @@ where
     }
 }
 
-fn next_multiple_of_16(x: u64) -> u64 {
+fn next_multiple_of_16(x: usize) -> usize {
     ((x + 15) / 16) * 16
 }
 
@@ -195,37 +195,37 @@ impl QbgBuildParams {
         self
     }
 
-    pub fn number_of_first_objects(mut self, number_of_first_objects: u64) -> Self {
-        self.number_of_first_objects = number_of_first_objects;
+    pub fn number_of_first_objects(mut self, number_of_first_objects: usize) -> Self {
+        self.number_of_first_objects = number_of_first_objects as u64;
         self
     }
 
-    pub fn number_of_first_clusters(mut self, number_of_first_clusters: u64) -> Self {
-        self.number_of_first_clusters = number_of_first_clusters;
+    pub fn number_of_first_clusters(mut self, number_of_first_clusters: usize) -> Self {
+        self.number_of_first_clusters = number_of_first_clusters as u64;
         self
     }
 
-    pub fn number_of_second_objects(mut self, number_of_second_objects: u64) -> Self {
-        self.number_of_second_objects = number_of_second_objects;
+    pub fn number_of_second_objects(mut self, number_of_second_objects: usize) -> Self {
+        self.number_of_second_objects = number_of_second_objects as u64;
         self
     }
 
-    pub fn number_of_second_clusters(mut self, number_of_second_clusters: u64) -> Self {
-        self.number_of_second_clusters = number_of_second_clusters;
+    pub fn number_of_second_clusters(mut self, number_of_second_clusters: usize) -> Self {
+        self.number_of_second_clusters = number_of_second_clusters as u64;
         self
     }
 
-    pub fn number_of_third_clusters(mut self, number_of_third_clusters: u64) -> Self {
-        self.number_of_third_clusters = number_of_third_clusters;
+    pub fn number_of_third_clusters(mut self, number_of_third_clusters: usize) -> Self {
+        self.number_of_third_clusters = number_of_third_clusters as u64;
         self
     }
 
-    pub fn number_of_objects(mut self, number_of_objects: u64) -> Self {
-        self.number_of_objects = number_of_objects;
+    pub fn number_of_objects(mut self, number_of_objects: usize) -> Self {
+        self.number_of_objects = number_of_objects as u64;
         self
     }
-    pub fn number_of_subvectors(mut self, number_of_subvectors: u64) -> Self {
-        self.number_of_subvectors = number_of_subvectors;
+    pub fn number_of_subvectors(mut self, number_of_subvectors: usize) -> Self {
+        self.number_of_subvectors = number_of_subvectors as u64;
         self
     }
     pub fn optimization_clustering_init_mode(
@@ -236,18 +236,18 @@ impl QbgBuildParams {
         self
     }
 
-    pub fn rotation_iteration(mut self, rotation_iteration: u64) -> Self {
-        self.rotation_iteration = rotation_iteration;
+    pub fn rotation_iteration(mut self, rotation_iteration: usize) -> Self {
+        self.rotation_iteration = rotation_iteration as u64;
         self
     }
 
-    pub fn subvector_iteration(mut self, subvector_iteration: u64) -> Self {
-        self.subvector_iteration = subvector_iteration;
+    pub fn subvector_iteration(mut self, subvector_iteration: usize) -> Self {
+        self.subvector_iteration = subvector_iteration as u64;
         self
     }
 
-    pub fn number_of_matrices(mut self, number_of_matrices: u64) -> Self {
-        self.number_of_matrices = number_of_matrices;
+    pub fn number_of_matrices(mut self, number_of_matrices: usize) -> Self {
+        self.number_of_matrices = number_of_matrices as u64;
         self
     }
 

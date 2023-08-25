@@ -353,8 +353,8 @@ where
         }
     }
 
-    pub fn size(mut self, size: u64) -> Self {
-        self.size = size;
+    pub fn size(mut self, size: usize) -> Self {
+        self.size = size as u64;
         self
     }
 
@@ -373,13 +373,13 @@ where
         self
     }
 
-    pub fn number_of_explored_blobs(mut self, number_of_explored_blobs: u64) -> Self {
-        self.number_of_explored_blobs = number_of_explored_blobs;
+    pub fn number_of_explored_blobs(mut self, number_of_explored_blobs: usize) -> Self {
+        self.number_of_explored_blobs = number_of_explored_blobs as u64;
         self
     }
 
-    pub fn number_of_edges(mut self, number_of_edges: u64) -> Self {
-        self.number_of_edges = number_of_edges;
+    pub fn number_of_edges(mut self, number_of_edges: usize) -> Self {
+        self.number_of_edges = number_of_edges as u64;
         self
     }
 

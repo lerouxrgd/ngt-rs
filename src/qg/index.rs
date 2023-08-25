@@ -235,8 +235,8 @@ where
         }
     }
 
-    pub fn size(mut self, size: u64) -> Self {
-        self.size = size;
+    pub fn size(mut self, size: usize) -> Self {
+        self.size = size as u64;
         self
     }
 
