@@ -29,7 +29,7 @@ impl<T> NgtIndex<T>
 where
     T: NgtObjectType,
 {
-    /// Creates an empty ANNG index with the given [`NgtProperties`]().
+    /// Creates an empty ANNG index with the given [`NgtProperties`][].
     pub fn create<P: AsRef<Path>>(path: P, prop: NgtProperties<T>) -> Result<Self> {
         if cfg!(feature = "shared_mem") && path.as_ref().exists() {
             Err(Error(format!("Path {:?} already exists", path.as_ref())))?
@@ -180,7 +180,7 @@ where
         }
     }
 
-    /// Search the nearest vectors to the specified [`NgtQuery`]().
+    /// Search the nearest vectors to the specified [`NgtQuery`][].
     ///
     /// **The index must have been [`built`](NgtIndex::build) beforehand**.
     pub fn search_query(&self, query: NgtQuery<T>) -> Result<Vec<SearchResult>> {
