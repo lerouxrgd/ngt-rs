@@ -122,7 +122,7 @@ where
                         self.index,
                         vec.as_ptr() as *mut f32,
                         self.prop.dimension,
-                        res_size as u64,
+                        res_size,
                         epsilon,
                         -1.0,
                         results,
@@ -136,7 +136,7 @@ where
                         self.index,
                         vec.as_ptr() as *mut u8,
                         self.prop.dimension,
-                        res_size as u64,
+                        res_size,
                         epsilon,
                         -1.0,
                         results,
@@ -150,7 +150,7 @@ where
                         self.index,
                         vec.as_ptr() as *mut _,
                         self.prop.dimension,
-                        res_size as u64,
+                        res_size,
                         epsilon,
                         -1.0,
                         results,
@@ -445,9 +445,9 @@ impl<T> Drop for NgtIndex<T> {
 #[derive(Debug, Clone, PartialEq)]
 pub struct NgtQuery<'a, T> {
     query: &'a [T],
-    pub size: u64,
+    pub size: usize,
     pub epsilon: f32,
-    pub edge_size: u64,
+    pub edge_size: usize,
     pub radius: f32,
 }
 
@@ -460,13 +460,13 @@ where
             query,
             size: 10,
             epsilon: crate::EPSILON,
-            edge_size: u64::MIN,
+            edge_size: usize::MIN,
             radius: -1.,
         }
     }
 
     pub fn size(mut self, size: usize) -> Self {
-        self.size = size as u64;
+        self.size = size;
         self
     }
 
@@ -476,7 +476,7 @@ where
     }
 
     pub fn edge_size(mut self, edge_size: usize) -> Self {
-        self.edge_size = edge_size as u64;
+        self.edge_size = edge_size;
         self
     }
 

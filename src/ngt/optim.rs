@@ -119,13 +119,13 @@ where
 /// Parameters for [`optimize_anng_edges_number`](optimize_anng_edges_number).
 #[derive(Debug, Clone, PartialEq)]
 pub struct AnngEdgeOptimParams {
-    pub nb_queries: u64,
-    pub nb_results: u64,
-    pub nb_threads: u64,
+    pub nb_queries: usize,
+    pub nb_results: usize,
+    pub nb_threads: usize,
     pub target_accuracy: f32,
-    pub target_nb_objects: u64,
-    pub nb_sample_objects: u64,
-    pub nb_edges_max: u64,
+    pub target_nb_objects: usize,
+    pub nb_sample_objects: usize,
+    pub nb_edges_max: usize,
     pub log: bool,
 }
 
@@ -166,7 +166,7 @@ pub struct AnngRefineParams {
     expected_accuracy: f32,
     nb_edges: i32,
     edge_size: i32,
-    batch_size: u64,
+    batch_size: usize,
 }
 
 impl Default for AnngRefineParams {

@@ -327,12 +327,12 @@ impl IndexMode for ModeWrite {}
 #[derive(Debug, Clone, PartialEq)]
 pub struct QbgQuery<'a, T> {
     query: &'a [T],
-    pub size: u64,
+    pub size: usize,
     pub epsilon: f32,
     pub blob_epsilon: f32,
     pub result_expansion: f32,
-    pub number_of_explored_blobs: u64,
-    pub number_of_edges: u64,
+    pub number_of_explored_blobs: usize,
+    pub number_of_edges: usize,
     pub radius: f32,
 }
 
@@ -354,7 +354,7 @@ where
     }
 
     pub fn size(mut self, size: usize) -> Self {
-        self.size = size as u64;
+        self.size = size;
         self
     }
 
@@ -374,12 +374,12 @@ where
     }
 
     pub fn number_of_explored_blobs(mut self, number_of_explored_blobs: usize) -> Self {
-        self.number_of_explored_blobs = number_of_explored_blobs as u64;
+        self.number_of_explored_blobs = number_of_explored_blobs;
         self
     }
 
     pub fn number_of_edges(mut self, number_of_edges: usize) -> Self {
-        self.number_of_edges = number_of_edges as u64;
+        self.number_of_edges = number_of_edges;
         self
     }
 
@@ -424,7 +424,7 @@ mod tests {
         // Insert vectors and get their ids
         let nvecs = 64;
         let ids = (1..ndims * nvecs)
-            .step_by(ndims as usize)
+            .step_by(ndims)
             .map(|i| i as f32)
             .map(|i| {
                 repeat(i)
@@ -465,7 +465,7 @@ mod tests {
         // Insert vectors and get their ids
         let nvecs = 64;
         let ids = (1..ndims * nvecs)
-            .step_by(ndims as usize)
+            .step_by(ndims)
             .map(|i| f16::from_f32(i as f32))
             .map(|i| {
                 repeat(i)
@@ -509,7 +509,7 @@ mod tests {
         // Insert vectors and get their ids
         let nvecs = 64;
         let ids = (1..ndims * nvecs)
-            .step_by(ndims as usize)
+            .step_by(ndims)
             .map(|i| i as u8)
             .map(|i| {
                 repeat(i)
