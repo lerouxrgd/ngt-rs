@@ -215,7 +215,7 @@ impl<T> Drop for QgIndex<T> {
 #[derive(Debug, Clone, PartialEq)]
 pub struct QgQuery<'a, T> {
     query: &'a [T],
-    pub size: u64,
+    pub size: usize,
     pub epsilon: f32,
     pub result_expansion: f32,
     pub radius: f32,
@@ -236,7 +236,7 @@ where
     }
 
     pub fn size(mut self, size: usize) -> Self {
-        self.size = size as u64;
+        self.size = size;
         self
     }
 

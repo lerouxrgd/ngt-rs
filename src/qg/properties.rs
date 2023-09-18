@@ -337,7 +337,7 @@ where
 #[derive(Debug, Clone, PartialEq)]
 pub struct QgQuantizationParams {
     pub dimension_of_subvector: f32,
-    pub max_number_of_edges: u64,
+    pub max_number_of_edges: usize,
 }
 
 impl Default for QgQuantizationParams {
