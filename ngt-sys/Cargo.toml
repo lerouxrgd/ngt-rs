@@ -1,6 +1,6 @@
 [package]
 name = "ngt-sys"
-version = "2.1.3"
+version = "2.1.5"
 authors = ["Romain Leroux <romain@leroux.dev>"]
 edition = "2021"
 links = "ngt"
