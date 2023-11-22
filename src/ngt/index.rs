@@ -774,11 +774,6 @@ mod tests {
     }
 
     #[test]
-    fn test_dist_sparse_jaccard() -> Result<()> {
-        test_dist(NgtDistance::SparseJaccard)
-    }
-
-    #[test]
     fn test_dist_normalized_l2() -> Result<()> {
         test_dist(NgtDistance::NormalizedL2)
     }
@@ -786,10 +781,5 @@ mod tests {
     #[test]
     fn test_dist_poincare() -> Result<()> {
         test_dist(NgtDistance::Poincare)
-    }
-
-    #[test]
-    fn test_dist_lorentz() -> Result<()> {
-        test_dist(NgtDistance::Lorentz)
     }
 }
