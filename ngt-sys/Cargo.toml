@@ -1,6 +1,6 @@
 [package]
 name = "ngt-sys"
-version = "2.1.5"
+version = "2.1.6"
 authors = ["Romain Leroux <romain@leroux.dev>"]
 edition = "2021"
 links = "ngt"
@@ -11,7 +11,7 @@ categories = ["science"]
 license = "Apache-2.0"
 
 [build-dependencies]
-bindgen = "0.68"
+bindgen = "0.69"
 cmake = "0.1"
 cpp_build = { version = "0.5", optional = true }
 
