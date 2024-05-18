@@ -12,7 +12,7 @@ readme = "README.md"
 
 [dependencies]
 half = "2"
-ngt-sys = { path = "ngt-sys", version = "2.2.1" }
+ngt-sys = { path = "ngt-sys", version = "2.2.2" }
 num_enum = "0.7"
 scopeguard = "1"
 

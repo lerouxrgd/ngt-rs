@@ -58,6 +58,7 @@ pub enum NgtDistance {
     Jaccard = 7,
     SparseJaccard = 8,
     NormalizedL2 = 9,
+    InnerProduct = 10,
     Poincare = 100,
     Lorentz = 101,
 }
@@ -328,6 +329,11 @@ where
             }
             NgtDistance::NormalizedL2 => {
                 if !sys::ngt_set_property_distance_type_normalized_l2(raw_prop, ebuf) {
+                    Err(make_err(ebuf))?
+                }
+            }
+            NgtDistance::InnerProduct => {
+                if !sys::ngt_set_property_distance_type_inner_product(raw_prop, ebuf) {
                     Err(make_err(ebuf))?
                 }
             }
