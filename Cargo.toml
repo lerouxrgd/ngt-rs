@@ -1,6 +1,6 @@
 [package]
 name = "ngt"
-version = "0.7.1"
+version = "0.8.0"
 authors = ["Romain Leroux <romain@leroux.dev>"]
 edition = "2021"
 description = "Rust wrappers for NGT nearest neighbor search."
@@ -12,7 +12,7 @@ readme = "README.md"
 
 [dependencies]
 half = "2"
-ngt-sys = { path = "ngt-sys", version = "2.1.6" }
+ngt-sys = { path = "ngt-sys", version = "2.2.2" }
 num_enum = "0.7"
 scopeguard = "1"
 
